@@ -1,6 +1,7 @@
 # app.py
 import os
 import io
+from datetime import datetime, timedelta
 import requests
 import pandas as pd
 import plotly.graph_objects as go
@@ -12,75 +13,61 @@ st.set_page_config(
     layout="wide",
     page_icon="🌿",
 )
- 
+
+# --- 2. MOBILE CSS ---
 st.markdown("""
 <style>
-/* ── MOBILE LAYOUT (screens ≤ 768px) ── */
 @media (max-width: 768px) {
-
-    /* Tighten the main padding */
-    .block-container {
-        padding: 1rem 0.75rem !important;
-    }
-
-    /* Stack metric cards vertically instead of 3-column row */
-    [data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
-    }
-
-    /* Smaller title on mobile */
-    h1 { font-size: 1.4rem !important; }
-    h3 { font-size: 1.1rem !important; }
-    h4 { font-size: 1rem !important; }
-
-    /* Make tabs scrollable horizontally instead of wrapping */
+    .block-container { padding: 1rem 0.75rem !important; }
     [data-testid="stTabs"] > div:first-child {
         overflow-x: auto !important;
         white-space: nowrap !important;
     }
-
-    /* Chart height — shorter on mobile, less scrolling */
-    .js-plotly-plot {
-        height: 320px !important;
-    }
+    h1 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.1rem !important; }
 }
-
-/* ── DESKTOP — no changes, everything stays as-is ── */
+.price-card {
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    border-left: 4px solid;
+}
+.price-card.inteira   { border-color: #D97706; }
+.price-card.grainha   { border-color: #2563EB; }
+.price-card.triturado { border-color: #059669; }
+.card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #fff; }
+.card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; padding: 2px 0; }
+.card-val { font-weight: 600; color: #fff; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 3. CONSTANTS ---
 MASTER_FILE = "sima_master.csv"
-SIMA_EXPORT_URL = "https://sima.pt/sima/export"  # SIMA data endpoint
+GET_COTACOES_URL = "https://regsima.gpp.pt/regsima/consulta/get_cotacoes"
 
-
-# --- 2. AUTOMATED DATA FETCHING & MERGING ---
-def fetch_latest_sima_data():
-    """
-    Attempts to download the latest raw carob export directly from SIMA.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+# --- 4. DATA FETCHING ---
+def fetch_latest_sima_data(weeks_back=8):
+    end = datetime.now()
+    start = end - timedelta(weeks=weeks_back)
+    params = {
+        "setor": 23, "especie": 70, "regiao": 7, "mercado": 69,
+        "tipo": 8, "export": 1,
+        "ini": start.strftime("%Y-%m-%d"),
+        "fim": end.strftime("%Y-%m-%d"),
     }
     try:
-        response = requests.get(SIMA_EXPORT_URL, headers=headers, timeout=10)
-        if response.status_code == 200:
-            try:
-                df = pd.read_csv(io.StringIO(response.text), sep=";", encoding="latin1")
-            except Exception:
-                df = pd.read_csv(io.StringIO(response.text), encoding="utf-8-sig")
-            return df
+        res = requests.get(GET_COTACOES_URL, params=params,
+                           headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        res.raise_for_status()
+        res.encoding = "windows-1252"
+        return pd.read_csv(io.StringIO(res.text), sep=";")
     except Exception as e:
-        st.warning(f"Could not auto-fetch online data from SIMA: {e}")
-    return pd.DataFrame()
+        st.warning(f"Could not auto-fetch SIMA data: {e}")
+        return pd.DataFrame()
 
 
 def sync_and_get_master_data():
-    """
-    Loads local master file and merges any newly fetched rows seamlessly.
-    """
-    # 1. Load existing local file if available
     local_df = pd.DataFrame()
     if os.path.exists(MASTER_FILE):
         try:
@@ -88,27 +75,19 @@ def sync_and_get_master_data():
         except Exception:
             pass
 
-    # Fall back to any initial SIMA file in folder
     if local_df.empty:
         for f in os.listdir("."):
-            if f.endswith((".csv", ".xlsx", ".xls")) and "sima" in f.lower():
+            if f.endswith((".csv", ".xlsx", ".xls")) and "sima" in f.lower() and f != MASTER_FILE:
                 try:
-                    if f.endswith(".csv"):
-                        local_df = pd.read_csv(f, sep=";", encoding="latin1")
-                    else:
-                        local_df = pd.read_excel(f)
+                    local_df = pd.read_csv(f, sep=";", encoding="latin1") if f.endswith(".csv") else pd.read_excel(f)
                     break
                 except Exception:
                     continue
 
-    # 2. Try fetching fresh online data
     online_df = fetch_latest_sima_data()
-
-    # 3. Merge online data with local data if available
     if not online_df.empty:
         if not local_df.empty:
             combined = pd.concat([local_df, online_df], ignore_index=True)
-            # Remove exact duplicates across key columns
             dedup_cols = [c for c in ["Produto", "Data", "Mercado"] if c in combined.columns]
             if dedup_cols:
                 combined = combined.drop_duplicates(subset=dedup_cols, keep="last")
@@ -116,14 +95,13 @@ def sync_and_get_master_data():
         else:
             local_df = online_df
 
-    # 4. Save persistent master copy to disk
     if not local_df.empty:
         local_df.to_csv(MASTER_FILE, sep=";", index=False, encoding="utf-8-sig")
 
     return local_df
 
 
-# --- 3. DATA PROCESSING ENGINE ---
+# --- 5. DATA PROCESSING ---
 @st.cache_data(ttl=300)
 def process_data(df_raw):
     if df_raw.empty:
@@ -132,29 +110,24 @@ def process_data(df_raw):
     df = df_raw.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
-    required_cols = ["Produto", "Data", "Mínima", "Máxima", "Freq"]
-    missing = [c for c in required_cols if c not in df.columns]
-    if missing:
+    date_col = next((c for c in df.columns if "data" in c.lower()), None)
+    prod_col = next((c for c in df.columns if "prod" in c.lower()), None)
+    min_col  = next((c for c in df.columns if "mín" in c.lower() or "min" in c.lower()), None)
+    max_col  = next((c for c in df.columns if "máx" in c.lower() or "max" in c.lower()), None)
+    freq_col = next((c for c in df.columns if "freq" in c.lower() or "mais" in c.lower()), None)
+
+    if not all([date_col, prod_col, min_col, max_col, freq_col]):
         return pd.DataFrame()
 
-    # Parse Dates (DD/MM/YYYY)
-    df["date"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-    if df["date"].isna().all():
-        df["date"] = pd.to_datetime(
-            df["Data"], dayfirst=True, format="mixed", errors="coerce"
-        )
+    df["date"] = pd.to_datetime(df[date_col], dayfirst=True, format="mixed", errors="coerce")
     df = df.dropna(subset=["date"])
 
-    # Clean numeric fields
-    price_fields = ["Mínima", "Máxima", "Freq"]
-    for p in price_fields:
-        if df[p].dtype == object:
-            df[p] = df[p].astype(str).str.replace(",", ".").str.strip()
-        df[p] = pd.to_numeric(df[p], errors="coerce")
-        df[p] = df[p].replace(0, pd.NA)
+    for col in [min_col, max_col, freq_col]:
+        if df[col].dtype == object:
+            df[col] = df[col].astype(str).str.replace(",", ".").str.strip()
+        df[col] = pd.to_numeric(df[col], errors="coerce").replace(0, pd.NA)
 
-    # Categorize from Produto
-    def categorize_produto(val):
+    def categorize(val):
         v = str(val).lower()
         if "grainha" in v or "graínha" in v or "semente" in v:
             return "grainha"
@@ -162,69 +135,46 @@ def process_data(df_raw):
             return "triturado"
         return "inteira"
 
-    df["specie_key"] = df["Produto"].apply(categorize_produto)
+    df["specie_key"] = df[prod_col].apply(categorize)
 
-    # Aggregate & Pivot
-    grouped = (
-        df.groupby(["date", "specie_key"])[price_fields].mean().reset_index()
-    )
-    pivoted = grouped.pivot(
-        index="date", columns="specie_key", values=["Freq", "Mínima", "Máxima"]
-    )
-    pivoted.columns = [f"{col[1]}_{col[0].lower()}" for col in pivoted.columns]
+    grouped = df.groupby(["date", "specie_key"])[[min_col, max_col, freq_col]].mean().reset_index()
+    grouped = grouped.rename(columns={min_col: "min_v", max_col: "max_v", freq_col: "freq_v"})
 
-    rename_map = {
-        "inteira_mínima": "inteira_min",
-        "inteira_máxima": "inteira_max",
-        "grainha_mínima": "grainha_min",
-        "grainha_máxima": "grainha_max",
-        "triturado_mínima": "triturado_min",
-        "triturado_máxima": "triturado_max",
-    }
-    pivoted = pivoted.rename(columns=rename_map)
+    pivoted = grouped.pivot(index="date", columns="specie_key", values=["min_v", "max_v", "freq_v"])
+    pivoted.columns = [f"{col[1]}_{col[0].replace('_v', '')}" for col in pivoted.columns]
 
-    for c in [
-        "inteira_freq", "inteira_min", "inteira_max",
-        "grainha_freq", "grainha_min", "grainha_max",
-        "triturado_freq", "triturado_min", "triturado_max",
-    ]:
+    for c in ["inteira_freq", "inteira_min", "inteira_max",
+              "grainha_freq", "grainha_min", "grainha_max",
+              "triturado_freq", "triturado_min", "triturado_max"]:
         if c not in pivoted.columns:
             pivoted[c] = pd.NA
 
-    final_df = pivoted.reset_index().sort_values(by="date", ascending=True).reset_index(drop=True)
-    val_cols = [c for c in final_df.columns if c != "date"]
-    final_df[val_cols] = final_df[val_cols].ffill()
+    final = pivoted.reset_index().sort_values("date").reset_index(drop=True)
+    val_cols = [c for c in final.columns if c != "date"]
+    final[val_cols] = final[val_cols].ffill()
+    return final
 
-    return final_df
 
-
-# --- 4. HEADER & INTERFACE ---
-st.title("🌿 Algarve Carob Exact Market Prices")
-
+# --- 6. LOAD DATA ---
 raw_sima_data = sync_and_get_master_data()
 df_all = process_data(raw_sima_data)
 
 if df_all.empty:
-    st.warning("No SIMA data found! Please place your initial SIMA export file in this folder.")
+    st.warning("No SIMA data found. Place your SIMA export CSV in this folder and restart.")
     st.stop()
 
 last_date = df_all["date"].max().strftime("%Y-%m-%d")
 
-# --- 5. SIDEBAR FILTERS & MANUAL SYNC BUTTON ---
-st.sidebar.header("⚙️ Data Filters")
+# --- 7. SIDEBAR ---
+st.sidebar.header("⚙️ Filters")
 
 if st.sidebar.button("🔄 Sync Latest SIMA Quotes"):
     st.cache_data.clear()
     raw_sima_data = sync_and_get_master_data()
     df_all = process_data(raw_sima_data)
-    st.sidebar.success("Database synchronized!")
+    st.sidebar.success("Synced!")
 
-time_range = st.sidebar.radio(
-    "Select Range:",
-    ["All Time", "5 Years", "1 Year", "6 Months"],
-    index=0,
-)
-
+time_range = st.sidebar.radio("Range:", ["All Time", "5 Years", "1 Year", "6 Months"], index=0)
 max_date = df_all["date"].max()
 if time_range == "6 Months":
     min_date = max_date - pd.DateOffset(months=6)
@@ -238,72 +188,64 @@ else:
 df = df_all[(df_all["date"] >= min_date) & (df_all["date"] <= max_date)].copy()
 
 unit_mode = st.sidebar.selectbox("Unit:", ["EUR / kg", "EUR / arroba (15 kg)"])
-multiplier = 15.0 if unit_mode == "EUR / arroba (15 kg)" else 1.0
-unit_label = "€/@" if unit_mode == "EUR / arroba (15 kg)" else "€/kg"
+multiplier = 15.0 if "arroba" in unit_mode else 1.0
+unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
 selected_cats = st.sidebar.multiselect(
     "Categories:",
     ["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
     default=["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
 )
-
 selected_price_types = st.sidebar.multiselect(
     "Price Types:",
     ["Mais Frequente (Freq)", "Mínimo (Min)", "Máximo (Max)"],
     default=["Mais Frequente (Freq)"],
 )
 
-st.caption(f"🟢 Database Status: Synced (`sima_master.csv`) | Latest Entry: {last_date}")
+# --- 8. HEADER ---
+st.title("🌿 Algarve Carob Market Prices")
+st.caption(f"🟢 Live SIMA data | Latest entry: {last_date}")
 
-# --- 6. METRIC CARDS ---
-st.markdown("### 📍 Current SIMA Quotes")
+# --- 9. METRIC CARDS ---
+st.markdown("### 📍 Current Quotes")
 latest = df_all.iloc[-1]
 
 def fmt(val):
     return f"{val * multiplier:.2f} {unit_label}" if pd.notna(val) else "N/A"
 
-cols = st.columns(3)
-with cols[0]:
-    st.markdown("#### Alfarroba Inteira")
-    st.write(f"• **Freq:** {fmt(latest.get('inteira_freq'))}")
-    st.write(f"• **Min:** {fmt(latest.get('inteira_min'))}")
-    st.write(f"• **Max:** {fmt(latest.get('inteira_max'))}")
+def price_card(title, css_class, freq_key, min_key, max_key):
+    st.markdown(f"""
+    <div class="price-card {css_class}">
+        <div class="card-title">{title}</div>
+        <div class="card-row"><span>Freq</span><span class="card-val">{fmt(latest.get(freq_key))}</span></div>
+        <div class="card-row"><span>Min</span><span class="card-val">{fmt(latest.get(min_key))}</span></div>
+        <div class="card-row"><span>Max</span><span class="card-val">{fmt(latest.get(max_key))}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
 
-with cols[1]:
-    st.markdown("#### Alfarroba Graínha")
-    st.write(f"• **Freq:** {fmt(latest.get('grainha_freq'))}")
-    st.write(f"• **Min:** {fmt(latest.get('grainha_min'))}")
-    st.write(f"• **Max:** {fmt(latest.get('grainha_max'))}")
-
-with cols[2]:
-    st.markdown("#### Alfarroba Triturado Grosso")
-    st.write(f"• **Freq:** {fmt(latest.get('triturado_freq'))}")
-    st.write(f"• **Min:** {fmt(latest.get('triturado_min'))}")
-    st.write(f"• **Max:** {fmt(latest.get('triturado_max'))}")
+price_card("🟠 Alfarroba Inteira",          "inteira",   "inteira_freq",   "inteira_min",   "inteira_max")
+price_card("🔵 Alfarroba Graínha",           "grainha",   "grainha_freq",   "grainha_min",   "grainha_max")
+price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "triturado_min", "triturado_max")
 
 st.divider()
 
-# --- 7. GRAPH HELPER ---
-line_styles = {
-    "Mais Frequente (Freq)": "solid",
-    "Mínimo (Min)": "dash",
-    "Máximo (Max)": "dot",
-}
-cat_colors = {
+# --- 10. CHART ---
+line_styles = {"Mais Frequente (Freq)": "solid", "Mínimo (Min)": "dash", "Máximo (Max)": "dot"}
+cat_colors  = {
     "Alfarroba Inteira": "#D97706",
     "Alfarroba Graínha": "#2563EB",
     "Alfarroba Triturado Grosso": "#059669",
 }
 field_map = {
-    ("Alfarroba Inteira", "Mais Frequente (Freq)"): "inteira_freq",
-    ("Alfarroba Inteira", "Mínimo (Min)"): "inteira_min",
-    ("Alfarroba Inteira", "Máximo (Max)"): "inteira_max",
-    ("Alfarroba Graínha", "Mais Frequente (Freq)"): "grainha_freq",
-    ("Alfarroba Graínha", "Mínimo (Min)"): "grainha_min",
-    ("Alfarroba Graínha", "Máximo (Max)"): "grainha_max",
+    ("Alfarroba Inteira",          "Mais Frequente (Freq)"): "inteira_freq",
+    ("Alfarroba Inteira",          "Mínimo (Min)"):          "inteira_min",
+    ("Alfarroba Inteira",          "Máximo (Max)"):          "inteira_max",
+    ("Alfarroba Graínha",          "Mais Frequente (Freq)"): "grainha_freq",
+    ("Alfarroba Graínha",          "Mínimo (Min)"):          "grainha_min",
+    ("Alfarroba Graínha",          "Máximo (Max)"):          "grainha_max",
     ("Alfarroba Triturado Grosso", "Mais Frequente (Freq)"): "triturado_freq",
-    ("Alfarroba Triturado Grosso", "Mínimo (Min)"): "triturado_min",
-    ("Alfarroba Triturado Grosso", "Máximo (Max)"): "triturado_max",
+    ("Alfarroba Triturado Grosso", "Mínimo (Min)"):          "triturado_min",
+    ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
 }
 
 def build_chart(categories_to_plot):
@@ -312,57 +254,59 @@ def build_chart(categories_to_plot):
         for ptype in selected_price_types:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=df["date"],
-                        y=df[col_name] * multiplier,
-                        name=f"{cat} - {ptype}",
-                        line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2.2),
-                        connectgaps=True,
-                    )
-                )
+                fig.add_trace(go.Scatter(
+                    x=df["date"],
+                    y=df[col_name] * multiplier,
+                    name=f"{cat} - {ptype}",
+                    line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2.2),
+                    connectgaps=True,
+                ))
     fig.update_layout(
-    title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
-    xaxis_title="Date",
-    yaxis_title=f"Price ({unit_label})",
-    hovermode="x unified",
-    template="plotly_white",
-    height=550,
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="left",
-        x=0,
-    ),
+        title=dict(
+            text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+            y=0.88,
+            x=0,
+            xanchor="left",
+        ),
+        xaxis_title="Date",
+        yaxis=dict(
+            title=f"Price ({unit_label})",
+            type="log",
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        height=420,
+        margin=dict(t=110, b=40, l=50, r=10),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.10,
+            xanchor="left",
+            x=0,
+            font=dict(size=11),
+        ),
     )
     return fig
 
-# --- 8. CATEGORY TABS ---
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["📊 All Categories", "🟠 Alfarroba Inteira", "🔵 Alfarroba Graínha", "🟢 Triturado Grosso"]
+    ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
 )
-
 with tab1:
-    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="chart_tab_all")
-
+    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all")
 with tab2:
-    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="chart_tab_inteira")
-
+    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira")
 with tab3:
-    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="chart_tab_grainha")
-
+    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="grainha")
 with tab4:
-    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="chart_tab_triturado")
+    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="triturado")
 
-# --- 9. RAW DATA TABLE VIEW ---
-with st.expander("📋 View Processed Data Table"):
+# --- 11. RAW DATA TABLE ---
+with st.expander("📋 Raw Data"):
     table_df = df.copy()
     num_cols = [c for c in table_df.columns if c != "date"]
     if multiplier != 1.0:
         for col in num_cols:
             table_df[col] = table_df[col] * multiplier
-
     table_df["date"] = table_df["date"].dt.strftime("%d/%m/%Y")
     st.dataframe(
         table_df[["date"] + num_cols].sort_values("date", ascending=False),
