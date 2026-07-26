@@ -281,7 +281,7 @@ def build_chart(categories_to_plot):
     legend=dict(
         orientation="h",
         yanchor="top",
-        y=1.3,
+        y=2,
         xanchor="left",
         x=0,
         font=dict(size=11),
