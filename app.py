@@ -322,12 +322,19 @@ def build_chart(categories_to_plot):
                     )
                 )
     fig.update_layout(
-        title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
-        xaxis_title="Date",
-        yaxis_title=f"Price ({unit_label})",
-        hovermode="x unified",
-        template="plotly_white",
-        height=550,
+    title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+    xaxis_title="Date",
+    yaxis_title=f"Price ({unit_label})",
+    hovermode="x unified",
+    template="plotly_white",
+    height=550,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="left",
+        x=0,
+    ),
     )
     return fig
 
