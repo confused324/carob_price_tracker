@@ -8,7 +8,12 @@ import streamlit as st
 
 # --- 1. STREAMLIT CONFIG ---
 st.set_page_config(
-   st.markdown("""
+    page_title="Algarve Carob Market Tracker",
+    layout="wide",
+    page_icon="🌿",
+)
+ 
+st.markdown("""
 <style>
 /* ── MOBILE LAYOUT (screens ≤ 768px) ── */
 @media (max-width: 768px) {
@@ -45,10 +50,6 @@ st.set_page_config(
 /* ── DESKTOP — no changes, everything stays as-is ── */
 </style>
 """, unsafe_allow_html=True)
-    page_title="Algarve Carob Market Tracker",
-    layout="wide",
-    page_icon="🌿",
-)
 
 MASTER_FILE = "sima_master.csv"
 SIMA_EXPORT_URL = "https://sima.pt/sima/export"  # SIMA data endpoint
