@@ -8,6 +8,43 @@ import streamlit as st
 
 # --- 1. STREAMLIT CONFIG ---
 st.set_page_config(
+   st.markdown("""
+<style>
+/* ── MOBILE LAYOUT (screens ≤ 768px) ── */
+@media (max-width: 768px) {
+
+    /* Tighten the main padding */
+    .block-container {
+        padding: 1rem 0.75rem !important;
+    }
+
+    /* Stack metric cards vertically instead of 3-column row */
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+
+    /* Smaller title on mobile */
+    h1 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.1rem !important; }
+    h4 { font-size: 1rem !important; }
+
+    /* Make tabs scrollable horizontally instead of wrapping */
+    [data-testid="stTabs"] > div:first-child {
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+    }
+
+    /* Chart height — shorter on mobile, less scrolling */
+    .js-plotly-plot {
+        height: 320px !important;
+    }
+}
+
+/* ── DESKTOP — no changes, everything stays as-is ── */
+</style>
+""", unsafe_allow_html=True)
     page_title="Algarve Carob Market Tracker",
     layout="wide",
     page_icon="🌿",
