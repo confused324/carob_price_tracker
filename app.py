@@ -262,30 +262,31 @@ def build_chart(categories_to_plot):
                     connectgaps=True,
                 ))
     fig.update_layout(
-        title=dict(
-            text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
-            y=0.88,
-            x=0,
-            xanchor="left",
-        ),
-        xaxis_title="Date",
-        yaxis=dict(
-            title=f"Price ({unit_label})",
-            type="log",
-        ),
-        hovermode="x unified",
-        template="plotly_white",
-        height=420,
-        margin=dict(t=110, b=40, l=50, r=10),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.10,
-            xanchor="left",
-            x=0,
-            font=dict(size=11),
-        ),
-    )
+    title=dict(
+        text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+        y=0.98,
+        x=0,
+        xanchor="left",
+        yanchor="top",
+    ),
+    xaxis_title="Date",
+    yaxis=dict(
+        title=f"Price ({unit_label})",
+        type="log",
+    ),
+    hovermode="x unified",
+    template="plotly_white",
+    height=420,
+    margin=dict(t=140, b=40, l=50, r=10),
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=0.91,
+        xanchor="left",
+        x=0,
+        font=dict(size=11),
+    ),
+)
     return fig
 
 tab1, tab2, tab3, tab4 = st.tabs(
