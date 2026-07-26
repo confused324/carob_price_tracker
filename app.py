@@ -277,15 +277,22 @@ def build_chart(categories_to_plot):
     hovermode="x unified",
     template="plotly_white",
     height=420,
-    margin=dict(t=140, b=40, l=50, r=10),
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=0.91,
-        xanchor="left",
-        x=0,
-        font=dict(size=11),
-    ),
+    margin=dict(t=180, b=40, l=50, r=10),
+title=dict(
+    text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+    y=1.0,
+    x=0,
+    xanchor="left",
+    yanchor="top",
+),
+legend=dict(
+    orientation="h",
+    yanchor="top",
+    y=0.97,
+    xanchor="left",
+    x=0,
+    font=dict(size=11),
+),
 )
     return fig
 
