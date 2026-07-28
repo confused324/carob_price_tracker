@@ -272,10 +272,20 @@ def build_chart(categories_to_plot):
         title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
+        
+        # --- POSITION LEGEND ABOVE THE GRAPH ---
+        legend=dict(
+            orientation="h",       # Horizontal legend layout
+            yanchor="bottom",      # Anchor relative to legend's bottom
+            y=1.02,                # Position slightly above graph area (1.0 = top of chart)
+            xanchor="center",      # Center horizontally
+            x=0.5                  # Place at midpoint (50% across)
+        ),
+        
         yaxis=dict(
-            type="linear",          # Standard linear increment
-            rangemode="tozero",     # Always start at 0, dynamically expand to max value
-            autorange=True,         # Auto-adjusts range based on visible traces
+            type="linear",
+            rangemode="tozero",
+            autorange=True,
             tickformat=".2f" if multiplier == 1.0 else ".1f",
         ),
         hovermode="x unified",
