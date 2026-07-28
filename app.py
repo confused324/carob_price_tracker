@@ -250,43 +250,38 @@ field_map = {
 
 def build_chart(categories_to_plot):
     fig = go.Figure()
+    
     for cat in categories_to_plot:
         for ptype in selected_price_types:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
-                fig.add_trace(go.Scatter(
-                    x=df["date"],
-                    y=df[col_name] * multiplier,
-                    name=f"{cat} - {ptype}",
-                    line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2.2),
-                    connectgaps=True,
-                ))
+                # Ensure strictly numeric floats
+                y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["date"],
+                        y=y_data,
+                        name=f"{cat} - {ptype}",
+                        line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2.2),
+                        connectgaps=True,
+                    )
+                )
+
     fig.update_layout(
-    title=dict(
-        text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
-        y=1.0,
-        x=0,
-        xanchor="left",
-        yanchor="top",
-    ),
-    xaxis_title="Date",
-    yaxis=dict(
-        title=f"Price ({unit_label})",
-        type="log",
-    ),
-    hovermode="x unified",
-    template="plotly_white",
-    height=420,
-    margin=dict(t=180, b=40, l=50, r=10),
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=1.7,
-        xanchor="left",
-        x=0,
-        font=dict(size=11),
-    ),
-)
+        title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+        xaxis_title="Date",
+        yaxis_title=f"Price ({unit_label})",
+        yaxis=dict(
+            type="linear",          # Standard linear increment
+            rangemode="tozero",     # Always start at 0, dynamically expand to max value
+            autorange=True,         # Auto-adjusts range based on visible traces
+            tickformat=".2f" if multiplier == 1.0 else ".1f",
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        height=550,
+    )
     return fig
 
 tab1, tab2, tab3, tab4 = st.tabs(
