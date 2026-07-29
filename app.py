@@ -419,15 +419,6 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
     # Configure X-axis with auto-crop and native quick-range buttons
     xaxis_config = dict(
         type="date",
-        rangeselector=dict(
-            buttons=list([
-                dict(count=6, label="6m", step="month", stepmode="backward"),
-                dict(count=1, label="1y", step="year", stepmode="backward"),
-                dict(step="all", label="Reset View")
-            ]),
-            activecolor="#2563EB",
-            font=dict(size=10)
-        )
     )
     
     # Apply initial zoom range if specified
