@@ -273,15 +273,11 @@ def build_chart(categories_to_plot):
                 short_ptype = clean_ptypes.get(ptype, ptype)
                 trace_label = f"{short_cat} ({short_ptype})"
 
-                # SHOW FREQ BY DEFAULT; KEEP MIN & MAX READY IN LEGEND AS 'legendonly'
-                is_visible = True if "Freq" in short_ptype else "legendonly"
-
                 fig.add_trace(
                     go.Scatter(
                         x=df["date"],
                         y=y_data,
                         name=trace_label,
-                        visible=is_visible,
                         line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2),
                         connectgaps=True,
                     )
@@ -300,7 +296,7 @@ def build_chart(categories_to_plot):
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
         
-        # LEGEND AT BOTTOM (Grid Layout for up to 9 items)
+        # LEGEND AT BOTTOM (Grid Layout)
         legend=dict(
             orientation="h",       # Horizontal wrapping
             yanchor="top",
@@ -311,7 +307,7 @@ def build_chart(categories_to_plot):
             font=dict(size=11),    # Mobile-friendly readable font size
         ),
         
-        # Margins: Top is clean, Bottom gives space for 9 legend items
+        # Margins: Bottom spacing ensures all visible legend items display cleanly
         margin=dict(t=50, b=120, l=45, r=20), 
         
         yaxis=dict(
@@ -321,7 +317,7 @@ def build_chart(categories_to_plot):
             tickformat=".2f" if multiplier == 1.0 else ".1f",
         ),
         hovermode="x unified",
-        template="plotly_white",  # Or "plotly_dark"
+        template="plotly_white",
         height=580,
     )
     return fig
