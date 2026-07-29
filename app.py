@@ -416,14 +416,25 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
                     )
                 )
 
-    # Configure X-axis viewport
-    xaxis_config = dict(type="date")
+    # Configure X-axis with auto-crop and native quick-range buttons
+    xaxis_config = dict(
+        type="date",
+        rangeselector=dict(
+            buttons=list([
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(step="all", label="Reset View")
+            ]),
+            activecolor="#2563EB",
+            font=dict(size=10)
+        )
+    )
     
-    # AUTO-CROP: Set initial camera view to the comparison window when active
+    # Apply initial zoom range if specified
     if crop_start and crop_end:
         xaxis_config["range"] = [crop_start, crop_end]
 
-    # OPTIONAL HIGHLIGHT RECTANGLE: Show shaded band if toggled on
+    # Draw shaded comparison region if highlight is toggled on
     if highlight_start and highlight_end:
         fig.add_vrect(
             x0=highlight_start,
@@ -474,8 +485,49 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         height=580,
     )
     return fig
-
+    
 # --- NEW UPDATED CODE ---
+st.markdown("### 📈 Interactive Price Chart")
+
+# Dedicated Chart Zoom Control Bar
+chart_ctrl_1, chart_ctrl_2 = st.columns([3, 1])
+
+with chart_ctrl_1:
+    enable_custom_chart_zoom = st.checkbox("🔍 Apply custom date window to graph view only", value=False)
+
+with chart_ctrl_2:
+    reset_chart_view = st.button("🔄 Reset Zoom", use_container_width=True, help="Reset graph to default view")
+
+# Handle Custom Chart Window vs Default Crop
+if enable_custom_chart_zoom:
+    cz_col1, cz_col2 = st.columns(2)
+    with cz_col1:
+        cz_start = st.date_input(
+            "Graph Zoom Start:",
+            value=(latest_date - pd.DateOffset(months=6)).date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="cz_start_key"
+        )
+    with cz_col2:
+        cz_end = st.date_input(
+            "Graph Zoom End:",
+            value=latest_date.date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="cz_end_key"
+        )
+    active_crop_start = pd.Timestamp(cz_start)
+    active_crop_end = pd.Timestamp(cz_end)
+else:
+    active_crop_start = crop_start
+    active_crop_end = crop_end
+
+# Triggering "Reset Zoom" clears the crop boundaries back to default view
+if reset_chart_view:
+    active_crop_start = None
+    active_crop_end = None
+
 tab1, tab2, tab3, tab4 = st.tabs(
     ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
 )
@@ -488,28 +540,28 @@ chart_config = {
 
 with tab1:
     st.plotly_chart(
-        build_chart(selected_cats, crop_start, crop_end, chart_h_start, chart_h_end), 
+        build_chart(selected_cats, active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="all", 
         config=chart_config
     )
 with tab2:
     st.plotly_chart(
-        build_chart(["Alfarroba Inteira"], crop_start, crop_end, chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Inteira"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="inteira", 
         config=chart_config
     )
 with tab3:
     st.plotly_chart(
-        build_chart(["Alfarroba Graínha"], crop_start, crop_end, chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Graínha"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="grainha", 
         config=chart_config
     )
 with tab4:
     st.plotly_chart(
-        build_chart(["Alfarroba Triturado Grosso"], crop_start, crop_end, chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Triturado Grosso"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="triturado", 
         config=chart_config
