@@ -237,15 +237,15 @@ cat_colors  = {
     "Alfarroba Triturado Grosso": "#059669",
 }
 field_map = {
-    ("Alfarroba Inteira",          "(Freq)"): "inteira_freq",
-    ("Alfarroba Inteira",          "(Min)"):          "inteira_min",
-    ("Alfarroba Inteira",          "(Max)"):          "inteira_max",
-    ("Alfarroba Graínha",          "(Freq)"): "grainha_freq",
-    ("Alfarroba Graínha",          "(Min)"):          "grainha_min",
-    ("Alfarroba Graínha",          "(Max)"):          "grainha_max",
-    ("Alfarroba Triturado Grosso", "(Freq)"): "triturado_freq",
-    ("Alfarroba Triturado Grosso", "(Min)"):          "triturado_min",
-    ("Alfarroba Triturado Grosso", "(Max)"):          "triturado_max",
+    ("Alfarroba Inteira",          "Mais Frequente (Freq)"): "inteira_freq",
+    ("Alfarroba Inteira",          "Mínimo (Min)"):          "inteira_min",
+    ("Alfarroba Inteira",          "Máximo (Max)"):          "inteira_max",
+    ("Alfarroba Graínha",          "Mais Frequente (Freq)"): "grainha_freq",
+    ("Alfarroba Graínha",          "Mínimo (Min)"):          "grainha_min",
+    ("Alfarroba Graínha",          "Máximo (Max)"):          "grainha_max",
+    ("Alfarroba Triturado Grosso", "Mais Frequente (Freq)"): "triturado_freq",
+    ("Alfarroba Triturado Grosso", "Mínimo (Min)"):          "triturado_min",
+    ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
 }
 
 def build_chart(categories_to_plot):
