@@ -355,3 +355,32 @@ with st.expander("📋 Raw Data"):
         table_df[["date"] + num_cols].sort_values("date", ascending=False),
         use_container_width=True,
     )
+
+# --- 12. DATA SOURCES & LEGAL DISCLAIMERS ---
+st.divider()
+
+col_source, col_disclaimer = st.columns(2)
+
+with col_source:
+    st.markdown("""
+    ### ℹ️ Data Sources & Attribution
+    
+    * **Primary Source:** **SIMA** (*Sistema de Informação de Mercados Agrícolas*)
+    * **Publishing Entity:** **GPP** (*Gabinete de Planeamento, Políticas e Administração Geral — Ministério da Agricultura e Pescas*)
+    * **Platform Notice:** This dashboard is an **independent platform** designed to visualize publicly available agricultural data. It is not officially affiliated with or endorsed by GPP or SIMA.
+    """)
+
+with col_disclaimer:
+    st.markdown("""
+    ### ⚠️ Legal & Trading Disclaimer
+    
+    * **Informational Use Only:** All prices, trends, and statistics are presented strictly for general historical reference and analytical purposes.
+    * **No Financial or Commercial Advice:** Data published here does **not** constitute commercial valuation, trading advice, or binding contract price fixing.
+    * **Limitation of Liability:** The project maintainers accept no responsibility for commercial transactions, harvest negotiations, or financial losses resulting from reliance on this data.
+    """)
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.caption(
+    "🌿 **Algarve Carob Market Tracker** | Open-source platform licensed under "
+    "[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/)."
+)
