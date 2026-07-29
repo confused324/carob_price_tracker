@@ -236,7 +236,7 @@ with comp_col_select:
     comp_period = st.selectbox(
         "Compare price changes across period:",
         [
-            "None (Off)",               # Allows turning off comparison entirely
+            "None (Off)",
             "1 Week", 
             "1 Month", 
             "3 Months", 
@@ -247,12 +247,11 @@ with comp_col_select:
             "Max (All Time)",
             "📅 Custom Date Range"
         ],
-        index=0  # Defaults to "None (Off)" for a clean starting view
+        index=0
     )
 
 with comp_col_toggle:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # Spacer
-    # Only enable the highlight checkbox if a period is selected
     show_highlight = st.checkbox(
         "Highlight period on chart", 
         value=False, 
@@ -262,11 +261,14 @@ with comp_col_toggle:
 latest_date = df_all["date"].max()
 min_available_date = df_all["date"].min()
 
-# Handle "None (Off)" state
 if comp_period == "None (Off)":
     start_date = None
     end_date = None
-    st.info("💡 Select a time period or custom range above to see price change comparisons.")
+    crop_start = None
+    crop_end = None
+    chart_h_start = None
+    chart_h_end = None
+    st.info("💡 Select a time period or custom range above to compare price changes and crop chart view.")
 
 else:
     if comp_period == "📅 Custom Date Range":
@@ -314,6 +316,12 @@ else:
         else:  # Max (All Time)
             start_date = min_available_date
 
+    # Define crop and highlight boundaries
+    crop_start = start_date
+    crop_end = end_date
+    chart_h_start = start_date if show_highlight else None
+    chart_h_end = end_date if show_highlight else None
+
     start_df = df_all[df_all["date"] <= start_date]
     start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
     actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
@@ -352,10 +360,6 @@ else:
                 else:
                     st.metric(label=f"{ptype}", value="N/A", delta=None)
 
-# Pass dates to chart ONLY if 'show_highlight' is checked
-chart_h_start = start_date if show_highlight else None
-chart_h_end = end_date if show_highlight else None
-
 st.divider()
 
 # --- 10. CHART ---
@@ -377,7 +381,7 @@ field_map = {
     ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
 }
 
-def build_chart(categories_to_plot, highlight_start=None, highlight_end=None, zoom_to_range=False):
+def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_start=None, highlight_end=None):
     fig = go.Figure()
 
     clean_cat_names = {
@@ -412,12 +416,19 @@ def build_chart(categories_to_plot, highlight_start=None, highlight_end=None, zo
                     )
                 )
 
-    # VISUAL INTERACTION: Highlight comparison period on the chart
+    # Configure X-axis viewport
+    xaxis_config = dict(type="date")
+    
+    # AUTO-CROP: Set initial camera view to the comparison window when active
+    if crop_start and crop_end:
+        xaxis_config["range"] = [crop_start, crop_end]
+
+    # OPTIONAL HIGHLIGHT RECTANGLE: Show shaded band if toggled on
     if highlight_start and highlight_end:
         fig.add_vrect(
             x0=highlight_start,
             x1=highlight_end,
-            fillcolor="rgba(37, 99, 235, 0.12)",   # Subtle translucent blue highlight
+            fillcolor="rgba(37, 99, 235, 0.12)",
             layer="below",
             line_width=1.5,
             line_dash="dash",
@@ -426,11 +437,6 @@ def build_chart(categories_to_plot, highlight_start=None, highlight_end=None, zo
             annotation_position="top left",
             annotation_font=dict(size=10, color="#888")
         )
-
-    # Configure X-axis zoom range if focus checkbox is selected
-    xaxis_config = dict(type="date")
-    if zoom_to_range and highlight_start and highlight_end:
-        xaxis_config["range"] = [highlight_start, highlight_end]
 
     fig.update_layout(
         title=dict(
@@ -482,28 +488,28 @@ chart_config = {
 
 with tab1:
     st.plotly_chart(
-        build_chart(selected_cats, chart_h_start, chart_h_end), 
+        build_chart(selected_cats, crop_start, crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="all", 
         config=chart_config
     )
 with tab2:
     st.plotly_chart(
-        build_chart(["Alfarroba Inteira"], chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Inteira"], crop_start, crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="inteira", 
         config=chart_config
     )
 with tab3:
     st.plotly_chart(
-        build_chart(["Alfarroba Graínha"], chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Graínha"], crop_start, crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="grainha", 
         config=chart_config
     )
 with tab4:
     st.plotly_chart(
-        build_chart(["Alfarroba Triturado Grosso"], chart_h_start, chart_h_end), 
+        build_chart(["Alfarroba Triturado Grosso"], crop_start, crop_end, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="triturado", 
         config=chart_config
