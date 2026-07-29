@@ -250,25 +250,33 @@ field_map = {
 
 def build_chart(categories_to_plot):
     fig = go.Figure()
-    
+
+    clean_cat_names = {
+        "Alfarroba Inteira": "Inteira",
+        "Alfarroba Graínha": "Graínha",
+        "Alfarroba Triturado Grosso": "Triturado"
+    }
+
     for cat in categories_to_plot:
         for ptype in selected_price_types:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
-                # Ensure strictly numeric floats
                 y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
-                
+                short_cat = clean_cat_names.get(cat, cat)
+                trace_label = f"{short_cat} ({ptype})"
+
                 fig.add_trace(
                     go.Scatter(
                         x=df["date"],
                         y=y_data,
-                        name=f"{cat} - {ptype}",
-                        line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2.2),
+                        name=trace_label,
+                        line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2),
                         connectgaps=True,
                     )
                 )
 
-   fig.update_layout(
+    # Make sure this line is aligned with the 'for' loop above (4 spaces in)
+    fig.update_layout(
         title=dict(
             text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
             y=0.98,
@@ -278,19 +286,21 @@ def build_chart(categories_to_plot):
         ),
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
-        
-        # --- MOBILE-FRIENDLY LEGEND BELOW GRAPH ---
         legend=dict(
-            orientation="h",        # Keep items horizontal
+            orientation="h",
             yanchor="top",
-            y=-0.25,                # Push below the X-axis date labels
+            y=-0.25,
             xanchor="center",
             x=0.5,
-            entrywidth=120,         # Wrap long names cleanly
+            entrywidth=120,
         ),
-        
-        margin=dict(t=60, b=120, l=40, r=20), # Add bottom margin so legend isn't cut off
-        yaxis=dict(type="linear", rangemode="tozero", autorange=True),
+        margin=dict(t=60, b=120, l=40, r=20),
+        yaxis=dict(
+            type="linear",
+            rangemode="tozero",
+            autorange=True,
+            tickformat=".2f" if multiplier == 1.0 else ".1f",
+        ),
         hovermode="x unified",
         template="plotly_white",
         height=550,
