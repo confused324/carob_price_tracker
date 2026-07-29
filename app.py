@@ -18,14 +18,39 @@ st.set_page_config(
 st.markdown("""
 <style>
 @media (max-width: 768px) {
-    .block-container { padding: 1rem 0.75rem !important; }
+    .block-container { padding: 1rem 0.5rem !important; }
     [data-testid="stTabs"] > div:first-child {
         overflow-x: auto !important;
         white-space: nowrap !important;
     }
-    h1 { font-size: 1.4rem !important; }
-    h3 { font-size: 1.1rem !important; }
+    h1 { font-size: 1.3rem !important; }
+    h3 { font-size: 1.05rem !important; }
+
+    /* Force comparison columns side-by-side on mobile */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"]) {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"]) > div[data-testid="column"] {
+        width: 33.33% !important;
+        min-width: 0 !important;
+        flex: 1 1 33.33% !important;
+    }
+
+    /* Smaller font sizes for compact metrics on phones */
+    div[data-testid="stMetric"] label {
+        font-size: 0.70rem !important;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        font-size: 0.80rem !important;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
+        font-size: 0.65rem !important;
+    }
 }
+
 .price-card {
     background: #1e1e1e;
     border-radius: 12px;
@@ -396,8 +421,12 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         "Máximo (Max)": "Max"
     }
 
-    for cat in categories_to_plot:
-        for ptype in selected_price_types:
+    # LOOP ORDER: ptype first, then cat
+    # Row 1: Inteira Freq | Graínha Freq | Triturado Freq
+    # Row 2: Inteira Min  | Graínha Min  | Triturado Min
+    # Row 3: Inteira Max  | Graínha Max  | Triturado Max
+    for ptype in selected_price_types:
+        for cat in categories_to_plot:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
                 y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
@@ -416,16 +445,11 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
                     )
                 )
 
-    # Configure X-axis with auto-crop and native quick-range buttons
-    xaxis_config = dict(
-        type="date",
-    )
+    xaxis_config = dict(type="date")
     
-    # Apply initial zoom range if specified
     if crop_start and crop_end:
         xaxis_config["range"] = [crop_start, crop_end]
 
-    # Draw shaded comparison region if highlight is toggled on
     if highlight_start and highlight_end:
         fig.add_vrect(
             x0=highlight_start,
@@ -453,17 +477,18 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         yaxis_title=f"Price ({unit_label})",
         xaxis=xaxis_config,
         
+        # 3-COLUMN LEGEND GRID
         legend=dict(
             orientation="h",
             yanchor="top",
             y=-0.22,
             xanchor="center",
             x=0.5,
-            entrywidth=110,
-            font=dict(size=11),
+            entrywidth=98,         # Compact column width to fit 3 items across phone screens
+            font=dict(size=10),    # Readable compact text for desktop and mobile
         ),
         
-        margin=dict(t=50, b=120, l=45, r=20), 
+        margin=dict(t=50, b=130, l=45, r=20), 
         
         yaxis=dict(
             type="linear",
