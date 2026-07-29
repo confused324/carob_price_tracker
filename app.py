@@ -230,27 +230,32 @@ price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "t
 # --- 9.5. PRICE COMPARISON ---
 st.markdown("### 📊 Price Change Comparison")
 
-# Preset selector (includes Custom Date Range option)
-comp_period = st.selectbox(
-    "Compare price changes across period:",
-    [
-        "1 Week", 
-        "1 Month", 
-        "3 Months", 
-        "6 Months", 
-        "Year-to-Date (YTD)", 
-        "1 Year", 
-        "5 Years", 
-        "Max (All Time)",
-        "📅 Custom Date Range"
-    ],
-    index=1  # Defaults to 1 Month
-)
+comp_col_select, comp_col_zoom = st.columns([3, 2])
+
+with comp_col_select:
+    comp_period = st.selectbox(
+        "Compare price changes across period:",
+        [
+            "1 Week", 
+            "1 Month", 
+            "3 Months", 
+            "6 Months", 
+            "Year-to-Date (YTD)", 
+            "1 Year", 
+            "5 Years", 
+            "Max (All Time)",
+            "📅 Custom Date Range"
+        ],
+        index=1
+    )
+
+with comp_col_zoom:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # Spacer
+    focus_chart = st.checkbox("🔍 Focus chart on this window", value=False)
 
 latest_date = df_all["date"].max()
 min_available_date = df_all["date"].min()
 
-# Determine Start and End dates based on selection
 if comp_period == "📅 Custom Date Range":
     col_start, col_end = st.columns(2)
     with col_start:
@@ -270,7 +275,6 @@ if comp_period == "📅 Custom Date Range":
             key="comp_end_date"
         )
     
-    # Validation check for date order
     if picked_start > picked_end:
         st.error("⚠️ Start date cannot be later than End date.")
         start_date = pd.Timestamp(picked_start)
@@ -297,19 +301,16 @@ else:
     else:  # Max (All Time)
         start_date = min_available_date
 
-# Locate closest available historical row for Start Date
 start_df = df_all[df_all["date"] <= start_date]
 start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
 actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
 
-# Locate closest available historical row for End Date
 end_df = df_all[df_all["date"] <= end_date]
 end_row = end_df.iloc[-1] if not end_df.empty else df_all.iloc[-1]
 actual_end_date_str = end_row["date"].strftime("%d/%m/%Y")
 
 st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
 
-# Display 3-column comparative metrics
 comp_col1, comp_col2, comp_col3 = st.columns(3)
 
 categories_info = [
@@ -334,7 +335,6 @@ for title, col, key in categories_info:
                 val_str = f"{end_val:.2f} {unit_label}"
                 delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
                 
-                # Streamlit automatically colors positive deltas green and negative deltas red
                 st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
             else:
                 st.metric(label=f"{ptype}", value="N/A", delta=None)
@@ -360,7 +360,7 @@ field_map = {
     ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
 }
 
-def build_chart(categories_to_plot):
+def build_chart(categories_to_plot, highlight_start=None, highlight_end=None, zoom_to_range=False):
     fig = go.Figure()
 
     clean_cat_names = {
@@ -395,8 +395,27 @@ def build_chart(categories_to_plot):
                     )
                 )
 
+    # VISUAL INTERACTION: Highlight comparison period on the chart
+    if highlight_start and highlight_end:
+        fig.add_vrect(
+            x0=highlight_start,
+            x1=highlight_end,
+            fillcolor="rgba(37, 99, 235, 0.12)",   # Subtle translucent blue highlight
+            layer="below",
+            line_width=1.5,
+            line_dash="dash",
+            line_color="rgba(37, 99, 235, 0.4)",
+            annotation_text="Comparison Period",
+            annotation_position="top left",
+            annotation_font=dict(size=10, color="#888")
+        )
+
+    # Configure X-axis zoom range if focus checkbox is selected
+    xaxis_config = dict(type="date")
+    if zoom_to_range and highlight_start and highlight_end:
+        xaxis_config["range"] = [highlight_start, highlight_end]
+
     fig.update_layout(
-        # Clean title at top-left
         title=dict(
             text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
             x=0.01,
@@ -407,19 +426,18 @@ def build_chart(categories_to_plot):
         ),
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
+        xaxis=xaxis_config,
         
-        # LEGEND AT BOTTOM (Grid Layout)
         legend=dict(
-            orientation="h",       # Horizontal wrapping
+            orientation="h",
             yanchor="top",
-            y=-0.22,               # Pushes legend safely below the X-axis date labels
+            y=-0.22,
             xanchor="center",
-            x=0.5,                 # Centered horizontally
-            entrywidth=110,        # Fixed column width forces items into neat grid columns
-            font=dict(size=11),    # Mobile-friendly readable font size
+            x=0.5,
+            entrywidth=110,
+            font=dict(size=11),
         ),
         
-        # Margins: Bottom spacing ensures all visible legend items display cleanly
         margin=dict(t=50, b=120, l=45, r=20), 
         
         yaxis=dict(
@@ -439,7 +457,6 @@ tab1, tab2, tab3, tab4 = st.tabs(
     ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
 )
 
-# Shared clean toolbar config for desktop and mobile
 chart_config = {
     "displayModeBar": "hover",
     "displaylogo": False,
@@ -447,13 +464,33 @@ chart_config = {
 }
 
 with tab1:
-    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all", config=chart_config)
+    st.plotly_chart(
+        build_chart(selected_cats, start_date, end_date, focus_chart), 
+        use_container_width=True, 
+        key="all", 
+        config=chart_config
+    )
 with tab2:
-    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira", config=chart_config)
+    st.plotly_chart(
+        build_chart(["Alfarroba Inteira"], start_date, end_date, focus_chart), 
+        use_container_width=True, 
+        key="inteira", 
+        config=chart_config
+    )
 with tab3:
-    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="grainha", config=chart_config)
+    st.plotly_chart(
+        build_chart(["Alfarroba Graínha"], start_date, end_date, focus_chart), 
+        use_container_width=True, 
+        key="grainha", 
+        config=chart_config
+    )
 with tab4:
-    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="triturado", config=chart_config)
+    st.plotly_chart(
+        build_chart(["Alfarroba Triturado Grosso"], start_date, end_date, focus_chart), 
+        use_container_width=True, 
+        key="triturado", 
+        config=chart_config
+    )
 
 # --- 11. RAW DATA TABLE ---
 with st.expander("📋 Raw Data"):
