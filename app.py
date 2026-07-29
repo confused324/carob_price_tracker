@@ -481,16 +481,28 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         "Máximo (Max)": "Max"
     }
 
-    # Ordering: ptype first, then cat creates 3 columns across:
-    # Row 1: Inteira (Freq) | Graínha (Freq) | Triturado (Freq)
-    # Row 2: Inteira (Min)  | Graínha (Min)  | Triturado (Min)
-    # Row 3: Inteira (Max)  | Graínha (Max)  | Triturado Max
+    # Track visible Y values in the selected date window for dynamic vertical zoom
+    all_visible_y_values = []
+
+    # Slice data for calculating dynamic Y-axis bounds
+    if crop_start and crop_end:
+        mask = (df["date"] >= pd.Timestamp(crop_start)) & (df["date"] <= pd.Timestamp(crop_end))
+        df_slice = df[mask]
+    else:
+        df_slice = df
+
     for ptype in selected_price_types:
         for cat in categories_to_plot:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
+                # Full series for chart line rendering
                 y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
                 
+                # Visible slice for Y-scale dynamic calculation
+                y_slice = pd.to_numeric(df_slice[col_name], errors="coerce").dropna() * multiplier
+                if not y_slice.empty:
+                    all_visible_y_values.extend(y_slice.tolist())
+
                 short_cat = clean_cat_names.get(cat, cat)
                 short_ptype = clean_ptypes.get(ptype, ptype)
                 trace_label = f"{short_cat} ({short_ptype})"
@@ -506,9 +518,31 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
                 )
 
     xaxis_config = dict(type="date")
-    
+    yaxis_config = dict(
+        type="linear",
+        tickformat=".2f" if multiplier == 1.0 else ".1f",
+    )
+
+    # Set X-axis date range
     if crop_start and crop_end:
         xaxis_config["range"] = [crop_start, crop_end]
+
+    # Calculate dynamic Y-axis scale based ONLY on visible data
+    if all_visible_y_values:
+        y_min = min(all_visible_y_values)
+        y_max = max(all_visible_y_values)
+        y_span = y_max - y_min
+        
+        # Add 8% padding top and bottom so lines don't hit edge boundaries
+        padding = y_span * 0.08 if y_span > 0 else (y_max * 0.05 if y_max > 0 else 0.5)
+        
+        calculated_min = max(0, y_min - padding)
+        calculated_max = y_max + padding
+        
+        yaxis_config["range"] = [calculated_min, calculated_max]
+        yaxis_config["autorange"] = False
+    else:
+        yaxis_config["autorange"] = True
 
     if highlight_start and highlight_end:
         fig.add_vrect(
@@ -536,27 +570,20 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
         xaxis=xaxis_config,
+        yaxis=yaxis_config,
         
-        # STRICT 3-COLUMN LEGEND GRID (33% WIDTH PER COLUMN)
         legend=dict(
             orientation="h",
             entrywidthmode="fraction",
-            entrywidth=0.33,       # Forces exactly 3 equal columns across screen
+            entrywidth=0.33,
             yanchor="top",
             y=-0.22,
             xanchor="center",
             x=0.5,
-            font=dict(size=9.5),   # Scaled font size so 3 items fit on mobile
+            font=dict(size=9.5),
         ),
         
         margin=dict(t=50, b=130, l=45, r=20), 
-        
-        yaxis=dict(
-            type="linear",
-            rangemode="tozero",
-            autorange=True,
-            tickformat=".2f" if multiplier == 1.0 else ".1f",
-        ),
         hovermode="x unified",
         template="plotly_white",
         height=580,
