@@ -230,12 +230,13 @@ price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "t
 # --- 9.5. PRICE COMPARISON ---
 st.markdown("### 📊 Price Change Comparison")
 
-comp_col_select, comp_col_zoom = st.columns([3, 2])
+comp_col_select, comp_col_toggle = st.columns([3, 2])
 
 with comp_col_select:
     comp_period = st.selectbox(
         "Compare price changes across period:",
         [
+            "None (Off)",               # Allows turning off comparison entirely
             "1 Week", 
             "1 Month", 
             "3 Months", 
@@ -246,98 +247,114 @@ with comp_col_select:
             "Max (All Time)",
             "📅 Custom Date Range"
         ],
-        index=1
+        index=0  # Defaults to "None (Off)" for a clean starting view
     )
 
-with comp_col_zoom:
+with comp_col_toggle:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # Spacer
-    focus_chart = st.checkbox("🔍 Focus chart on this window", value=False)
+    # Only enable the highlight checkbox if a period is selected
+    show_highlight = st.checkbox(
+        "Highlight period on chart", 
+        value=False, 
+        disabled=(comp_period == "None (Off)")
+    )
 
 latest_date = df_all["date"].max()
 min_available_date = df_all["date"].min()
 
-if comp_period == "📅 Custom Date Range":
-    col_start, col_end = st.columns(2)
-    with col_start:
-        picked_start = st.date_input(
-            "Start Date:",
-            value=(latest_date - pd.DateOffset(months=1)).date(),
-            min_value=min_available_date.date(),
-            max_value=latest_date.date(),
-            key="comp_start_date"
-        )
-    with col_end:
-        picked_end = st.date_input(
-            "End Date:",
-            value=latest_date.date(),
-            min_value=min_available_date.date(),
-            max_value=latest_date.date(),
-            key="comp_end_date"
-        )
-    
-    if picked_start > picked_end:
-        st.error("⚠️ Start date cannot be later than End date.")
-        start_date = pd.Timestamp(picked_start)
-        end_date = pd.Timestamp(picked_start)
-    else:
-        start_date = pd.Timestamp(picked_start)
-        end_date = pd.Timestamp(picked_end)
+# Handle "None (Off)" state
+if comp_period == "None (Off)":
+    start_date = None
+    end_date = None
+    st.info("💡 Select a time period or custom range above to see price change comparisons.")
+
 else:
-    end_date = latest_date
-    if comp_period == "1 Week":
-        start_date = latest_date - pd.DateOffset(weeks=1)
-    elif comp_period == "1 Month":
-        start_date = latest_date - pd.DateOffset(months=1)
-    elif comp_period == "3 Months":
-        start_date = latest_date - pd.DateOffset(months=3)
-    elif comp_period == "6 Months":
-        start_date = latest_date - pd.DateOffset(months=6)
-    elif comp_period == "Year-to-Date (YTD)":
-        start_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
-    elif comp_period == "1 Year":
-        start_date = latest_date - pd.DateOffset(years=1)
-    elif comp_period == "5 Years":
-        start_date = latest_date - pd.DateOffset(years=5)
-    else:  # Max (All Time)
-        start_date = min_available_date
+    if comp_period == "📅 Custom Date Range":
+        col_start, col_end = st.columns(2)
+        with col_start:
+            picked_start = st.date_input(
+                "Start Date:",
+                value=(latest_date - pd.DateOffset(months=1)).date(),
+                min_value=min_available_date.date(),
+                max_value=latest_date.date(),
+                key="comp_start_date"
+            )
+        with col_end:
+            picked_end = st.date_input(
+                "End Date:",
+                value=latest_date.date(),
+                min_value=min_available_date.date(),
+                max_value=latest_date.date(),
+                key="comp_end_date"
+            )
+        
+        if picked_start > picked_end:
+            st.error("⚠️ Start date cannot be later than End date.")
+            start_date = pd.Timestamp(picked_start)
+            end_date = pd.Timestamp(picked_start)
+        else:
+            start_date = pd.Timestamp(picked_start)
+            end_date = pd.Timestamp(picked_end)
+    else:
+        end_date = latest_date
+        if comp_period == "1 Week":
+            start_date = latest_date - pd.DateOffset(weeks=1)
+        elif comp_period == "1 Month":
+            start_date = latest_date - pd.DateOffset(months=1)
+        elif comp_period == "3 Months":
+            start_date = latest_date - pd.DateOffset(months=3)
+        elif comp_period == "6 Months":
+            start_date = latest_date - pd.DateOffset(months=6)
+        elif comp_period == "Year-to-Date (YTD)":
+            start_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
+        elif comp_period == "1 Year":
+            start_date = latest_date - pd.DateOffset(years=1)
+        elif comp_period == "5 Years":
+            start_date = latest_date - pd.DateOffset(years=5)
+        else:  # Max (All Time)
+            start_date = min_available_date
 
-start_df = df_all[df_all["date"] <= start_date]
-start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
-actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
+    start_df = df_all[df_all["date"] <= start_date]
+    start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
+    actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
 
-end_df = df_all[df_all["date"] <= end_date]
-end_row = end_df.iloc[-1] if not end_df.empty else df_all.iloc[-1]
-actual_end_date_str = end_row["date"].strftime("%d/%m/%Y")
+    end_df = df_all[df_all["date"] <= end_date]
+    end_row = end_df.iloc[-1] if not end_df.empty else df_all.iloc[-1]
+    actual_end_date_str = end_row["date"].strftime("%d/%m/%Y")
 
-st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
+    st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
 
-comp_col1, comp_col2, comp_col3 = st.columns(3)
+    # Display comparison metrics
+    comp_col1, comp_col2, comp_col3 = st.columns(3)
+    categories_info = [
+        ("🟠 Alfarroba Inteira",          comp_col1, "inteira"),
+        ("🔵 Alfarroba Graínha",           comp_col2, "grainha"),
+        ("🟢 Alfarroba Triturado Grosso",  comp_col3, "triturado"),
+    ]
 
-categories_info = [
-    ("🟠 Alfarroba Inteira",          comp_col1, "inteira"),
-    ("🔵 Alfarroba Graínha",           comp_col2, "grainha"),
-    ("🟢 Alfarroba Triturado Grosso",  comp_col3, "triturado"),
-]
-
-for title, col, key in categories_info:
-    with col:
-        st.markdown(f"**{title}**")
-        for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
-            end_v = end_row.get(pkey)
-            start_v = start_row.get(pkey)
-            
-            if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
-                end_val = end_v * multiplier
-                start_val = start_v * multiplier
-                diff = end_val - start_val
-                pct = (diff / start_val) * 100
+    for title, col, key in categories_info:
+        with col:
+            st.markdown(f"**{title}**")
+            for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
+                end_v = end_row.get(pkey)
+                start_v = start_row.get(pkey)
                 
-                val_str = f"{end_val:.2f} {unit_label}"
-                delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
-                
-                st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
-            else:
-                st.metric(label=f"{ptype}", value="N/A", delta=None)
+                if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
+                    end_val = end_v * multiplier
+                    start_val = start_v * multiplier
+                    diff = end_val - start_val
+                    pct = (diff / start_val) * 100
+                    
+                    val_str = f"{end_val:.2f} {unit_label}"
+                    delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
+                    
+                    st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
+                else:
+                    st.metric(label=f"{ptype}", value="N/A", delta=None)
+
+# Pass dates to chart ONLY if 'show_highlight' is checked
+chart_h_start = start_date if show_highlight else None
+chart_h_end = end_date if show_highlight else None
 
 st.divider()
 
@@ -465,33 +482,32 @@ chart_config = {
 
 with tab1:
     st.plotly_chart(
-        build_chart(selected_cats, start_date, end_date, focus_chart), 
+        build_chart(selected_cats, chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="all", 
         config=chart_config
     )
 with tab2:
     st.plotly_chart(
-        build_chart(["Alfarroba Inteira"], start_date, end_date, focus_chart), 
+        build_chart(["Alfarroba Inteira"], chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="inteira", 
         config=chart_config
     )
 with tab3:
     st.plotly_chart(
-        build_chart(["Alfarroba Graínha"], start_date, end_date, focus_chart), 
+        build_chart(["Alfarroba Graínha"], chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="grainha", 
         config=chart_config
     )
 with tab4:
     st.plotly_chart(
-        build_chart(["Alfarroba Triturado Grosso"], start_date, end_date, focus_chart), 
+        build_chart(["Alfarroba Triturado Grosso"], chart_h_start, chart_h_end), 
         use_container_width=True, 
         key="triturado", 
         config=chart_config
     )
-
 # --- 11. RAW DATA TABLE ---
 with st.expander("📋 Raw Data"):
     table_df = df.copy()
