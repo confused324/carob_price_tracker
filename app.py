@@ -230,9 +230,9 @@ price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "t
 # --- 9.5. PRICE COMPARISON ---
 st.markdown("### 📊 Price Change Comparison")
 
-# Preset selector (includes Custom Date option)
+# Preset selector (includes Custom Date Range option)
 comp_period = st.selectbox(
-    "Compare current quotes against:",
+    "Compare price changes across period:",
     [
         "1 Week", 
         "1 Month", 
@@ -242,7 +242,7 @@ comp_period = st.selectbox(
         "1 Year", 
         "5 Years", 
         "Max (All Time)",
-        "📅 Custom Date"
+        "📅 Custom Date Range"
     ],
     index=1  # Defaults to 1 Month
 )
@@ -250,41 +250,66 @@ comp_period = st.selectbox(
 latest_date = df_all["date"].max()
 min_available_date = df_all["date"].min()
 
-# Calculate target baseline date
-if comp_period == "📅 Custom Date":
-    # Displays calendar date picker when Custom Date is selected
-    picked_date = st.date_input(
-        "Select baseline comparison date:",
-        value=(latest_date - pd.DateOffset(months=1)).date(),
-        min_value=min_available_date.date(),
-        max_value=latest_date.date()
-    )
-    target_date = pd.Timestamp(picked_date)
-elif comp_period == "1 Week":
-    target_date = latest_date - pd.DateOffset(weeks=1)
-elif comp_period == "1 Month":
-    target_date = latest_date - pd.DateOffset(months=1)
-elif comp_period == "3 Months":
-    target_date = latest_date - pd.DateOffset(months=3)
-elif comp_period == "6 Months":
-    target_date = latest_date - pd.DateOffset(months=6)
-elif comp_period == "Year-to-Date (YTD)":
-    target_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
-elif comp_period == "1 Year":
-    target_date = latest_date - pd.DateOffset(years=1)
-elif comp_period == "5 Years":
-    target_date = latest_date - pd.DateOffset(years=5)
-else:  # Max (All Time)
-    target_date = min_available_date
+# Determine Start and End dates based on selection
+if comp_period == "📅 Custom Date Range":
+    col_start, col_end = st.columns(2)
+    with col_start:
+        picked_start = st.date_input(
+            "Start Date:",
+            value=(latest_date - pd.DateOffset(months=1)).date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="comp_start_date"
+        )
+    with col_end:
+        picked_end = st.date_input(
+            "End Date:",
+            value=latest_date.date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="comp_end_date"
+        )
+    
+    # Validation check for date order
+    if picked_start > picked_end:
+        st.error("⚠️ Start date cannot be later than End date.")
+        start_date = pd.Timestamp(picked_start)
+        end_date = pd.Timestamp(picked_start)
+    else:
+        start_date = pd.Timestamp(picked_start)
+        end_date = pd.Timestamp(picked_end)
+else:
+    end_date = latest_date
+    if comp_period == "1 Week":
+        start_date = latest_date - pd.DateOffset(weeks=1)
+    elif comp_period == "1 Month":
+        start_date = latest_date - pd.DateOffset(months=1)
+    elif comp_period == "3 Months":
+        start_date = latest_date - pd.DateOffset(months=3)
+    elif comp_period == "6 Months":
+        start_date = latest_date - pd.DateOffset(months=6)
+    elif comp_period == "Year-to-Date (YTD)":
+        start_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
+    elif comp_period == "1 Year":
+        start_date = latest_date - pd.DateOffset(years=1)
+    elif comp_period == "5 Years":
+        start_date = latest_date - pd.DateOffset(years=5)
+    else:  # Max (All Time)
+        start_date = min_available_date
 
-# Locate historical row closest to or on target_date
-past_df = df_all[df_all["date"] <= target_date]
-past_row = past_df.iloc[-1] if not past_df.empty else df_all.iloc[0]
-past_date_str = past_row["date"].strftime("%d/%m/%Y")
+# Locate closest available historical row for Start Date
+start_df = df_all[df_all["date"] <= start_date]
+start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
+actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
 
-st.caption(f"Comparing current prices ({last_date}) against baseline from **{past_date_str}**")
+# Locate closest available historical row for End Date
+end_df = df_all[df_all["date"] <= end_date]
+end_row = end_df.iloc[-1] if not end_df.empty else df_all.iloc[-1]
+actual_end_date_str = end_row["date"].strftime("%d/%m/%Y")
 
-# Display 3-column comparative view
+st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
+
+# Display 3-column comparative metrics
 comp_col1, comp_col2, comp_col3 = st.columns(3)
 
 categories_info = [
@@ -297,18 +322,19 @@ for title, col, key in categories_info:
     with col:
         st.markdown(f"**{title}**")
         for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
-            cur_v = latest.get(pkey)
-            past_v = past_row.get(pkey)
+            end_v = end_row.get(pkey)
+            start_v = start_row.get(pkey)
             
-            if pd.notna(cur_v) and pd.notna(past_v) and past_v > 0:
-                c_val = cur_v * multiplier
-                p_val = past_v * multiplier
-                diff = c_val - p_val
-                pct = (diff / p_val) * 100
-            
-                val_str = f"{c_val:.2f} {unit_label}"
+            if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
+                end_val = end_v * multiplier
+                start_val = start_v * multiplier
+                diff = end_val - start_val
+                pct = (diff / start_val) * 100
+                
+                val_str = f"{end_val:.2f} {unit_label}"
                 delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
                 
+                # Streamlit automatically colors positive deltas green and negative deltas red
                 st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
             else:
                 st.metric(label=f"{ptype}", value="N/A", delta=None)
