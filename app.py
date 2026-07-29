@@ -268,26 +268,29 @@ def build_chart(categories_to_plot):
                     )
                 )
 
-    fig.update_layout(
-        title=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+   fig.update_layout(
+        title=dict(
+            text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
+            y=0.98,
+            x=0.5,
+            xanchor="center",
+            yanchor="top",
+        ),
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
         
-        # --- POSITION LEGEND ABOVE THE GRAPH ---
+        # --- MOBILE-FRIENDLY LEGEND BELOW GRAPH ---
         legend=dict(
-            orientation="h",       # Horizontal legend layout
-            yanchor="bottom",      # Anchor relative to legend's bottom
-            y=1.02,                # Position slightly above graph area (1.0 = top of chart)
-            xanchor="center",      # Center horizontally
-            x=0.5                  # Place at midpoint (50% across)
+            orientation="h",        # Keep items horizontal
+            yanchor="top",
+            y=-0.25,                # Push below the X-axis date labels
+            xanchor="center",
+            x=0.5,
+            entrywidth=120,         # Wrap long names cleanly
         ),
         
-        yaxis=dict(
-            type="linear",
-            rangemode="tozero",
-            autorange=True,
-            tickformat=".2f" if multiplier == 1.0 else ".1f",
-        ),
+        margin=dict(t=60, b=120, l=40, r=20), # Add bottom margin so legend isn't cut off
+        yaxis=dict(type="linear", rangemode="tozero", autorange=True),
         hovermode="x unified",
         template="plotly_white",
         height=550,
