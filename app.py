@@ -230,7 +230,7 @@ price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "t
 # --- 9.5. PRICE COMPARISON ---
 st.markdown("### 📊 Price Change Comparison")
 
-# Preset selector for time comparison
+# Preset selector (includes Custom Date option)
 comp_period = st.selectbox(
     "Compare current quotes against:",
     [
@@ -241,15 +241,26 @@ comp_period = st.selectbox(
         "Year-to-Date (YTD)", 
         "1 Year", 
         "5 Years", 
-        "Max (All Time)"
+        "Max (All Time)",
+        "📅 Custom Date"
     ],
     index=1  # Defaults to 1 Month
 )
 
 latest_date = df_all["date"].max()
+min_available_date = df_all["date"].min()
 
-# Calculate baseline target date based on selected preset
-if comp_period == "1 Week":
+# Calculate target baseline date
+if comp_period == "📅 Custom Date":
+    # Displays calendar date picker when Custom Date is selected
+    picked_date = st.date_input(
+        "Select baseline comparison date:",
+        value=(latest_date - pd.DateOffset(months=1)).date(),
+        min_value=min_available_date.date(),
+        max_value=latest_date.date()
+    )
+    target_date = pd.Timestamp(picked_date)
+elif comp_period == "1 Week":
     target_date = latest_date - pd.DateOffset(weeks=1)
 elif comp_period == "1 Month":
     target_date = latest_date - pd.DateOffset(months=1)
@@ -264,7 +275,7 @@ elif comp_period == "1 Year":
 elif comp_period == "5 Years":
     target_date = latest_date - pd.DateOffset(years=5)
 else:  # Max (All Time)
-    target_date = df_all["date"].min()
+    target_date = min_available_date
 
 # Locate historical row closest to or on target_date
 past_df = df_all[df_all["date"] <= target_date]
@@ -294,11 +305,10 @@ for title, col, key in categories_info:
                 p_val = past_v * multiplier
                 diff = c_val - p_val
                 pct = (diff / p_val) * 100
-                
+            
                 val_str = f"{c_val:.2f} {unit_label}"
                 delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
                 
-                # Streamlit automatically colors positive deltas green and negative deltas red
                 st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
             else:
                 st.metric(label=f"{ptype}", value="N/A", delta=None)
