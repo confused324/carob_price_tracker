@@ -17,7 +17,7 @@ st.set_page_config(
 # --- 2. MOBILE CSS ---
 st.markdown("""
 <style>
-/* Prevent horizontal page scrolling/overflow */
+/* Prevent page horizontal scrolling/overflow */
 html, body, [data-testid="stAppViewContainer"], .main {
     overflow-x: hidden !important;
     max-width: 100vw !important;
@@ -33,7 +33,7 @@ html, body, [data-testid="stAppViewContainer"], .main {
     h3 { font-size: 1.05rem !important; }
 }
 
-/* Price Cards (Top Section) */
+/* Top Price Cards */
 .price-card {
     background: #1e1e1e;
     border-radius: 12px;
@@ -48,67 +48,68 @@ html, body, [data-testid="stAppViewContainer"], .main {
 .card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; padding: 2px 0; }
 .card-val { font-weight: 600; color: #fff; }
 
-/* Responsive 3-Column Price Comparison Grid (Fits mobile screens without scrolling) */
+/* Strict 3-Column Comparison Grid for PC & Mobile */
 .comp-container {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    margin-top: 8px;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: 10px !important;
 }
 .comp-col {
-    background: #18181b;
-    border-radius: 8px;
-    padding: 8px 6px;
-    min-width: 0;
-    overflow: hidden;
-    border: 1px solid #27272a;
+    flex: 1 1 33.33% !important;
+    min-width: 0 !important;
+    background: #18181b !important;
+    border-radius: 8px !important;
+    padding: 8px 6px !important;
+    border: 1px solid #27272a !important;
+    box-sizing: border-box !important;
 }
 .comp-header {
-    font-size: 0.78rem;
-    font-weight: 700;
-    margin-bottom: 8px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #f4f4f5;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    margin-bottom: 8px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    color: #f4f4f5 !important;
 }
 .comp-metric-item {
-    margin-bottom: 6px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #27272a;
+    margin-bottom: 6px !important;
+    padding-bottom: 4px !important;
+    border-bottom: 1px solid #27272a !important;
 }
 .comp-metric-item:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
+    border-bottom: none !important;
+    margin-bottom: 0 !important;
 }
 .comp-label {
-    font-size: 0.65rem;
-    color: #a1a1aa;
-    display: block;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 0.65rem !important;
+    color: #a1a1aa !important;
+    display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
 }
 .comp-val {
-    font-size: 0.80rem;
-    font-weight: 600;
-    color: #ffffff;
-    display: block;
-    line-height: 1.2;
+    font-size: 0.80rem !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    display: block !important;
+    line-height: 1.2 !important;
 }
 .comp-delta {
-    font-size: 0.65rem;
-    font-weight: 600;
-    display: inline-block;
-    padding: 1px 4px;
-    border-radius: 4px;
-    margin-top: 2px;
+    font-size: 0.65rem !important;
+    font-weight: 600 !important;
+    display: inline-block !important;
+    padding: 1px 4px !important;
+    border-radius: 4px !important;
+    margin-top: 2px !important;
 }
-.comp-delta.pos { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-.comp-delta.neg { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-.comp-delta.neutral { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; }
+.comp-delta.pos { background: rgba(34, 197, 94, 0.15) !important; color: #4ade80 !important; }
+.comp-delta.neg { background: rgba(239, 68, 68, 0.15) !important; color: #f87171 !important; }
+.comp-delta.neutral { background: rgba(161, 161, 170, 0.15) !important; color: #a1a1aa !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -401,16 +402,16 @@ else:
 
     st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
 
-    # Generate Responsive 3-Column HTML Grid
+    # Build clean HTML without line indentation (prevents Markdown code-block parsing)
     categories_info = [
         ("🟠 Inteira",   "inteira"),
         ("🔵 Graínha",   "grainha"),
         ("🟢 Triturado", "triturado"),
     ]
 
-    grid_html = '<div class="comp-container">'
+    grid_parts = ['<div class="comp-container">']
     for title, key in categories_info:
-        grid_html += f'<div class="comp-col"><div class="comp-header">{title}</div>'
+        grid_parts.append(f'<div class="comp-col"><div class="comp-header">{title}</div>')
         for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
             end_v = end_row.get(pkey)
             start_v = start_row.get(pkey)
@@ -425,24 +426,24 @@ else:
                 cls = "pos" if diff > 0 else ("neg" if diff < 0 else "neutral")
                 delta_str = f"{diff:+.2f} ({pct:+.1f}%)"
                 
-                grid_html += f'''
-                <div class="comp-metric-item">
-                    <span class="comp-label">{ptype}</span>
-                    <span class="comp-val">{val_str}</span>
-                    <span class="comp-delta {cls}">{delta_str}</span>
-                </div>
-                '''
+                grid_parts.append(
+                    f'<div class="comp-metric-item">'
+                    f'<span class="comp-label">{ptype}</span>'
+                    f'<span class="comp-val">{val_str}</span>'
+                    f'<span class="comp-delta {cls}">{delta_str}</span>'
+                    f'</div>'
+                )
             else:
-                grid_html += f'''
-                <div class="comp-metric-item">
-                    <span class="comp-label">{ptype}</span>
-                    <span class="comp-val">N/A</span>
-                </div>
-                '''
-        grid_html += '</div>'
-    grid_html += '</div>'
+                grid_parts.append(
+                    f'<div class="comp-metric-item">'
+                    f'<span class="comp-label">{ptype}</span>'
+                    f'<span class="comp-val">N/A</span>'
+                    f'</div>'
+                )
+        grid_parts.append('</div>')
+    grid_parts.append('</div>')
 
-    st.markdown(grid_html, unsafe_allow_html=True)
+    st.markdown("".join(grid_parts), unsafe_allow_html=True)
 
 st.divider()
 
