@@ -227,6 +227,82 @@ price_card("🟠 Alfarroba Inteira",          "inteira",   "inteira_freq",   "in
 price_card("🔵 Alfarroba Graínha",           "grainha",   "grainha_freq",   "grainha_min",   "grainha_max")
 price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "triturado_min", "triturado_max")
 
+# --- 9.5. PRICE COMPARISON ---
+st.markdown("### 📊 Price Change Comparison")
+
+# Preset selector for time comparison
+comp_period = st.selectbox(
+    "Compare current quotes against:",
+    [
+        "1 Week", 
+        "1 Month", 
+        "3 Months", 
+        "6 Months", 
+        "Year-to-Date (YTD)", 
+        "1 Year", 
+        "5 Years", 
+        "Max (All Time)"
+    ],
+    index=1  # Defaults to 1 Month
+)
+
+latest_date = df_all["date"].max()
+
+# Calculate baseline target date based on selected preset
+if comp_period == "1 Week":
+    target_date = latest_date - pd.DateOffset(weeks=1)
+elif comp_period == "1 Month":
+    target_date = latest_date - pd.DateOffset(months=1)
+elif comp_period == "3 Months":
+    target_date = latest_date - pd.DateOffset(months=3)
+elif comp_period == "6 Months":
+    target_date = latest_date - pd.DateOffset(months=6)
+elif comp_period == "Year-to-Date (YTD)":
+    target_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
+elif comp_period == "1 Year":
+    target_date = latest_date - pd.DateOffset(years=1)
+elif comp_period == "5 Years":
+    target_date = latest_date - pd.DateOffset(years=5)
+else:  # Max (All Time)
+    target_date = df_all["date"].min()
+
+# Locate historical row closest to or on target_date
+past_df = df_all[df_all["date"] <= target_date]
+past_row = past_df.iloc[-1] if not past_df.empty else df_all.iloc[0]
+past_date_str = past_row["date"].strftime("%d/%m/%Y")
+
+st.caption(f"Comparing current prices ({last_date}) against baseline from **{past_date_str}**")
+
+# Display 3-column comparative view
+comp_col1, comp_col2, comp_col3 = st.columns(3)
+
+categories_info = [
+    ("🟠 Alfarroba Inteira",          comp_col1, "inteira"),
+    ("🔵 Alfarroba Graínha",           comp_col2, "grainha"),
+    ("🟢 Alfarroba Triturado Grosso",  comp_col3, "triturado"),
+]
+
+for title, col, key in categories_info:
+    with col:
+        st.markdown(f"**{title}**")
+        for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
+            cur_v = latest.get(pkey)
+            past_v = past_row.get(pkey)
+            
+            if pd.notna(cur_v) and pd.notna(past_v) and past_v > 0:
+                c_val = cur_v * multiplier
+                p_val = past_v * multiplier
+                diff = c_val - p_val
+                pct = (diff / p_val) * 100
+                
+                val_str = f"{c_val:.2f} {unit_label}"
+                delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
+                
+                # Streamlit automatically colors positive deltas green and negative deltas red
+                st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
+            else:
+                st.metric(label=f"{ptype}", value="N/A", delta=None)
+
 st.divider()
 
 # --- 10. CHART ---
