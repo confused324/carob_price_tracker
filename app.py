@@ -17,6 +17,12 @@ st.set_page_config(
 # --- 2. MOBILE CSS ---
 st.markdown("""
 <style>
+/* Prevent horizontal page scrolling/overflow */
+html, body, [data-testid="stAppViewContainer"], .main {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+}
+
 @media (max-width: 768px) {
     .block-container { padding: 1rem 0.5rem !important; }
     [data-testid="stTabs"] > div:first-child {
@@ -25,32 +31,9 @@ st.markdown("""
     }
     h1 { font-size: 1.3rem !important; }
     h3 { font-size: 1.05rem !important; }
-
-    /* Force comparison columns side-by-side on mobile */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"]) {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
-    }
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stMetric"]) > div[data-testid="column"] {
-        width: 33.33% !important;
-        min-width: 0 !important;
-        flex: 1 1 33.33% !important;
-    }
-
-    /* Smaller font sizes for compact metrics on phones */
-    div[data-testid="stMetric"] label {
-        font-size: 0.70rem !important;
-    }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-        font-size: 0.80rem !important;
-    }
-    div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
-        font-size: 0.65rem !important;
-    }
 }
 
+/* Price Cards (Top Section) */
 .price-card {
     background: #1e1e1e;
     border-radius: 12px;
@@ -64,6 +47,68 @@ st.markdown("""
 .card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #fff; }
 .card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; padding: 2px 0; }
 .card-val { font-weight: 600; color: #fff; }
+
+/* Responsive 3-Column Price Comparison Grid (Fits mobile screens without scrolling) */
+.comp-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-top: 8px;
+}
+.comp-col {
+    background: #18181b;
+    border-radius: 8px;
+    padding: 8px 6px;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #27272a;
+}
+.comp-header {
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #f4f4f5;
+}
+.comp-metric-item {
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #27272a;
+}
+.comp-metric-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.comp-label {
+    font-size: 0.65rem;
+    color: #a1a1aa;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.comp-val {
+    font-size: 0.80rem;
+    font-weight: 600;
+    color: #ffffff;
+    display: block;
+    line-height: 1.2;
+}
+.comp-delta {
+    font-size: 0.65rem;
+    font-weight: 600;
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 4px;
+    margin-top: 2px;
+}
+.comp-delta.pos { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.comp-delta.neg { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.comp-delta.neutral { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -276,7 +321,7 @@ with comp_col_select:
     )
 
 with comp_col_toggle:
-    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # Spacer
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
     show_highlight = st.checkbox(
         "Highlight period on chart", 
         value=False, 
@@ -293,7 +338,7 @@ if comp_period == "None (Off)":
     crop_end = None
     chart_h_start = None
     chart_h_end = None
-    st.info("💡 Select a time period or custom range above to compare price changes and crop chart view.")
+    st.info("💡 Select a time period or custom range above to compare price changes.")
 
 else:
     if comp_period == "📅 Custom Date Range":
@@ -338,10 +383,9 @@ else:
             start_date = latest_date - pd.DateOffset(years=1)
         elif comp_period == "5 Years":
             start_date = latest_date - pd.DateOffset(years=5)
-        else:  # Max (All Time)
+        else:
             start_date = min_available_date
 
-    # Define crop and highlight boundaries
     crop_start = start_date
     crop_end = end_date
     chart_h_start = start_date if show_highlight else None
@@ -357,33 +401,48 @@ else:
 
     st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
 
-    # Display comparison metrics
-    comp_col1, comp_col2, comp_col3 = st.columns(3)
+    # Generate Responsive 3-Column HTML Grid
     categories_info = [
-        ("🟠 Alfarroba Inteira",          comp_col1, "inteira"),
-        ("🔵 Alfarroba Graínha",           comp_col2, "grainha"),
-        ("🟢 Alfarroba Triturado Grosso",  comp_col3, "triturado"),
+        ("🟠 Inteira",   "inteira"),
+        ("🔵 Graínha",   "grainha"),
+        ("🟢 Triturado", "triturado"),
     ]
 
-    for title, col, key in categories_info:
-        with col:
-            st.markdown(f"**{title}**")
-            for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
-                end_v = end_row.get(pkey)
-                start_v = start_row.get(pkey)
+    grid_html = '<div class="comp-container">'
+    for title, key in categories_info:
+        grid_html += f'<div class="comp-col"><div class="comp-header">{title}</div>'
+        for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
+            end_v = end_row.get(pkey)
+            start_v = start_row.get(pkey)
+            
+            if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
+                end_val = end_v * multiplier
+                start_val = start_v * multiplier
+                diff = end_val - start_val
+                pct = (diff / start_val) * 100
                 
-                if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
-                    end_val = end_v * multiplier
-                    start_val = start_v * multiplier
-                    diff = end_val - start_val
-                    pct = (diff / start_val) * 100
-                    
-                    val_str = f"{end_val:.2f} {unit_label}"
-                    delta_str = f"{diff:+.2f} {unit_label} ({pct:+.1f}%)"
-                    
-                    st.metric(label=f"{ptype}", value=val_str, delta=delta_str)
-                else:
-                    st.metric(label=f"{ptype}", value="N/A", delta=None)
+                val_str = f"{end_val:.2f} {unit_label}"
+                cls = "pos" if diff > 0 else ("neg" if diff < 0 else "neutral")
+                delta_str = f"{diff:+.2f} ({pct:+.1f}%)"
+                
+                grid_html += f'''
+                <div class="comp-metric-item">
+                    <span class="comp-label">{ptype}</span>
+                    <span class="comp-val">{val_str}</span>
+                    <span class="comp-delta {cls}">{delta_str}</span>
+                </div>
+                '''
+            else:
+                grid_html += f'''
+                <div class="comp-metric-item">
+                    <span class="comp-label">{ptype}</span>
+                    <span class="comp-val">N/A</span>
+                </div>
+                '''
+        grid_html += '</div>'
+    grid_html += '</div>'
+
+    st.markdown(grid_html, unsafe_allow_html=True)
 
 st.divider()
 
@@ -421,10 +480,10 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         "Máximo (Max)": "Max"
     }
 
-    # LOOP ORDER: ptype first, then cat
-    # Row 1: Inteira Freq | Graínha Freq | Triturado Freq
-    # Row 2: Inteira Min  | Graínha Min  | Triturado Min
-    # Row 3: Inteira Max  | Graínha Max  | Triturado Max
+    # Ordering: ptype first, then cat creates 3 columns across:
+    # Row 1: Inteira (Freq) | Graínha (Freq) | Triturado (Freq)
+    # Row 2: Inteira (Min)  | Graínha (Min)  | Triturado (Min)
+    # Row 3: Inteira (Max)  | Graínha (Max)  | Triturado Max
     for ptype in selected_price_types:
         for cat in categories_to_plot:
             col_name = field_map.get((cat, ptype))
@@ -477,15 +536,16 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         yaxis_title=f"Price ({unit_label})",
         xaxis=xaxis_config,
         
-        # 3-COLUMN LEGEND GRID
+        # STRICT 3-COLUMN LEGEND GRID (33% WIDTH PER COLUMN)
         legend=dict(
             orientation="h",
+            entrywidthmode="fraction",
+            entrywidth=0.33,       # Forces exactly 3 equal columns across screen
             yanchor="top",
             y=-0.22,
             xanchor="center",
             x=0.5,
-            entrywidth=98,         # Compact column width to fit 3 items across phone screens
-            font=dict(size=10),    # Readable compact text for desktop and mobile
+            font=dict(size=9.5),   # Scaled font size so 3 items fit on mobile
         ),
         
         margin=dict(t=50, b=130, l=45, r=20), 
