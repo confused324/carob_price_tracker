@@ -326,17 +326,26 @@ def build_chart(categories_to_plot):
     )
     return fig
 
+# --- NEW UPDATED CODE ---
 tab1, tab2, tab3, tab4 = st.tabs(
     ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
 )
+
+# Shared clean toolbar config for desktop and mobile
+chart_config = {
+    "displayModeBar": "hover",
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
+}
+
 with tab1:
-    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all")
+    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all", config=chart_config)
 with tab2:
-    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira")
+    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira", config=chart_config)
 with tab3:
-    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="grainha")
+    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="grainha", config=chart_config)
 with tab4:
-    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="triturado")
+    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="triturado", config=chart_config)
 
 # --- 11. RAW DATA TABLE ---
 with st.expander("📋 Raw Data"):
