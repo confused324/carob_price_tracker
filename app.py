@@ -251,10 +251,18 @@ field_map = {
 def build_chart(categories_to_plot):
     fig = go.Figure()
 
+    # Shorten base category names
     clean_cat_names = {
         "Alfarroba Inteira": "Inteira",
         "Alfarroba Graínha": "Graínha",
         "Alfarroba Triturado Grosso": "Triturado"
+    }
+
+    # Clean price type labels (prevents double parentheses)
+    clean_ptypes = {
+        "Mais Frequente (Freq)": "Freq",
+        "Mínimo (Min)": "Min",
+        "Máximo (Max)": "Max"
     }
 
     for cat in categories_to_plot:
@@ -262,8 +270,12 @@ def build_chart(categories_to_plot):
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
                 y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
+                
                 short_cat = clean_cat_names.get(cat, cat)
-                trace_label = f"{short_cat} ({ptype})"
+                short_ptype = clean_ptypes.get(ptype, ptype)
+                
+                # Creates clean labels like "Inteira (Freq)" or "Graínha (Min)"
+                trace_label = f"{short_cat} ({short_ptype})"
 
                 fig.add_trace(
                     go.Scatter(
@@ -275,7 +287,6 @@ def build_chart(categories_to_plot):
                     )
                 )
 
-    # Make sure this line is aligned with the 'for' loop above (4 spaces in)
     fig.update_layout(
         title=dict(
             text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
@@ -286,15 +297,18 @@ def build_chart(categories_to_plot):
         ),
         xaxis_title="Date",
         yaxis_title=f"Price ({unit_label})",
+        
+        # --- RESPONSIVE LEGEND CONFIGURATION ---
         legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.25,
+            orientation="h",         # Horizontal orientation
+            yanchor="bottom",
+            y=1.02,                  # Positioned cleanly above the chart
             xanchor="center",
             x=0.5,
-            entrywidth=120,
+            itemwidth=30,            # Prevents horizontal collisions
         ),
-        margin=dict(t=60, b=120, l=40, r=20),
+        
+        margin=dict(t=100, b=50, l=50, r=30),  # Top margin allocated for legend height
         yaxis=dict(
             type="linear",
             rangemode="tozero",
@@ -302,7 +316,7 @@ def build_chart(categories_to_plot):
             tickformat=".2f" if multiplier == 1.0 else ".1f",
         ),
         hovermode="x unified",
-        template="plotly_white",
+        template="plotly_white",     # Or "plotly_dark" matching your dark mode
         height=550,
     )
     return fig
