@@ -1,19 +1,23 @@
-import streamlit as st
+# app.py
+import os
+import io
+from datetime import datetime, timedelta
+import requests
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
-# --- 1. PAGE CONFIGURATION ---
+# --- 1. STREAMLIT CONFIG ---
 st.set_page_config(
-    page_title="Carob Price Tracker",
-    page_icon="🌾",
+    page_title="Algarve Carob Market Tracker",
     layout="wide",
-    initial_sidebar_state="expanded"
+    page_icon="🌿",
 )
 
-# --- 2. GLOBAL CSS STYLING ---
+# --- 2. MOBILE CSS ---
 st.markdown("""
 <style>
-/* Prevent horizontal page scrolling and overflow */
+/* Prevent page horizontal scrolling/overflow */
 html, body, [data-testid="stAppViewContainer"], .main {
     overflow-x: hidden !important;
     max-width: 100vw !important;
@@ -29,25 +33,22 @@ html, body, [data-testid="stAppViewContainer"], .main {
     h3 { font-size: 1.05rem !important; }
 }
 
-/* Overview Summary Cards */
+/* Top Price Cards */
 .price-card {
-    background: #18181b;
-    border-radius: 10px;
-    padding: 12px 14px;
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 12px 16px;
     margin-bottom: 10px;
     border-left: 4px solid;
-    border-top: 1px solid #27272a;
-    border-right: 1px solid #27272a;
-    border-bottom: 1px solid #27272a;
 }
-.price-card.inteira   { border-left-color: #D97706; }
-.price-card.grainha   { border-left-color: #2563EB; }
-.price-card.triturado { border-left-color: #059669; }
+.price-card.inteira   { border-color: #D97706; }
+.price-card.grainha   { border-color: #2563EB; }
+.price-card.triturado { border-color: #059669; }
 .card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #fff; }
-.card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #a1a1aa; padding: 2px 0; }
+.card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; padding: 2px 0; }
 .card-val { font-weight: 600; color: #fff; }
 
-/* Responsive 3-Column Comparison Grid (Strict Side-by-Side on PC & Mobile) */
+/* Strict 3-Column Comparison Grid for PC & Mobile */
 .comp-container {
     display: flex !important;
     flex-direction: row !important;
@@ -112,116 +113,192 @@ html, body, [data-testid="stAppViewContainer"], .main {
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DATA LOADING & CACHING ---
-@st.cache_data
-def load_data():
+# --- 3. CONSTANTS ---
+MASTER_FILE = "sima_master.csv"
+GET_COTACOES_URL = "https://regsima.gpp.pt/regsima/consulta/get_cotacoes"
+
+# --- 4. DATA FETCHING ---
+def fetch_latest_sima_data(weeks_back=8):
+    end = datetime.now()
+    start = end - timedelta(weeks=weeks_back)
+    params = {
+        "setor": 23, "especie": 70, "regiao": 7, "mercado": 69,
+        "tipo": 8, "export": 1,
+        "ini": start.strftime("%Y-%m-%d"),
+        "fim": end.strftime("%Y-%m-%d"),
+    }
     try:
-        df = pd.read_csv("carob_prices.csv")
-    except Exception:
-        # Fallback generator if carob_prices.csv is not present locally
-        dates = pd.date_range(start="2012-01-01", end="2026-07-20", freq="W")
-        df = pd.DataFrame({"date": dates})
-        df["inteira_freq"] = 0.30 + (df.index * 0.003)
-        df["inteira_min"] = df["inteira_freq"] * 0.95
-        df["inteira_max"] = df["inteira_freq"] * 1.05
-        df["grainha_freq"] = df["inteira_freq"] * 5.0
-        df["grainha_min"] = df["grainha_freq"] * 0.96
-        df["grainha_max"] = df["grainha_freq"] * 1.04
-        df["triturado_freq"] = df["inteira_freq"] * 1.2
-        df["triturado_min"] = df["triturado_freq"] * 0.94
-        df["triturado_max"] = df["triturado_freq"] * 1.06
-    
-    df["date"] = pd.to_datetime(df["date"])
-    return df.sort_values("date").reset_index(drop=True)
+        res = requests.get(GET_COTACOES_URL, params=params,
+                           headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        res.raise_for_status()
+        res.encoding = "windows-1252"
+        return pd.read_csv(io.StringIO(res.text), sep=";")
+    except Exception as e:
+        st.warning(f"Could not auto-fetch SIMA data: {e}")
+        return pd.DataFrame()
 
-df_all = load_data()
-df = df_all.copy()
 
-# --- 4. CONFIGURATION MAPPINGS ---
-field_map = {
-    ("Alfarroba Inteira", "Mais Frequente (Freq)"): "inteira_freq",
-    ("Alfarroba Inteira", "Mínimo (Min)"): "inteira_min",
-    ("Alfarroba Inteira", "Máximo (Max)"): "inteira_max",
-    ("Alfarroba Graínha", "Mais Frequente (Freq)"): "grainha_freq",
-    ("Alfarroba Graínha", "Mínimo (Min)"): "grainha_min",
-    ("Alfarroba Graínha", "Máximo (Max)"): "grainha_max",
-    ("Alfarroba Triturado Grosso", "Mais Frequente (Freq)"): "triturado_freq",
-    ("Alfarroba Triturado Grosso", "Mínimo (Min)"): "triturado_min",
-    ("Alfarroba Triturado Grosso", "Máximo (Max)"): "triturado_max",
-}
+def sync_and_get_master_data():
+    local_df = pd.DataFrame()
+    if os.path.exists(MASTER_FILE):
+        try:
+            local_df = pd.read_csv(MASTER_FILE, sep=";", encoding="utf-8-sig")
+        except Exception:
+            pass
 
-cat_colors = {
-    "Alfarroba Inteira": "#D97706",
-    "Alfarroba Graínha": "#2563EB",
-    "Alfarroba Triturado Grosso": "#059669",
-}
+    if local_df.empty:
+        for f in os.listdir("."):
+            if f.endswith((".csv", ".xlsx", ".xls")) and "sima" in f.lower() and f != MASTER_FILE:
+                try:
+                    local_df = pd.read_csv(f, sep=";", encoding="latin1") if f.endswith(".csv") else pd.read_excel(f)
+                    break
+                except Exception:
+                    continue
 
-line_styles = {
-    "Mais Frequente (Freq)": "solid",
-    "Mínimo (Min)": "dash",
-    "Máximo (Max)": "dot",
-}
+    online_df = fetch_latest_sima_data()
+    if not online_df.empty:
+        if not local_df.empty:
+            combined = pd.concat([local_df, online_df], ignore_index=True)
+            dedup_cols = [c for c in ["Produto", "Data", "Mercado"] if c in combined.columns]
+            if dedup_cols:
+                combined = combined.drop_duplicates(subset=dedup_cols, keep="last")
+            local_df = combined
+        else:
+            local_df = online_df
 
-# --- 5. SIDEBAR CONTROLS ---
-st.sidebar.title("🌾 Carob Tracker")
-st.sidebar.markdown("---")
+    if not local_df.empty:
+        local_df.to_csv(MASTER_FILE, sep=";", index=False, encoding="utf-8-sig")
 
-unit_choice = st.sidebar.radio("Display Unit", ["€/kg", "€/arroba (15 kg)"], index=0)
-multiplier = 15.0 if "arroba" in unit_choice else 1.0
-unit_label = "€/arroba" if multiplier == 15.0 else "€/kg"
+    return local_df
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Chart Filter Options")
 
-categories_to_plot = st.sidebar.multiselect(
-    "Products to Display:",
-    ["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
-    default=["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"]
-)
+# --- 5. DATA PROCESSING ---
+@st.cache_data(ttl=300)
+def process_data(df_raw):
+    if df_raw.empty:
+        return pd.DataFrame()
 
-selected_price_types = st.sidebar.multiselect(
-    "Price Metrics:",
-    ["Mais Frequente (Freq)", "Mínimo (Min)", "Máximo (Max)"],
-    default=["Mais Frequente (Freq)", "Mínimo (Min)", "Máximo (Max)"]
-)
+    df = df_raw.copy()
+    df.columns = [str(c).strip() for c in df.columns]
 
-min_date = df_all["date"].min()
+    date_col = next((c for c in df.columns if "data" in c.lower()), None)
+    prod_col = next((c for c in df.columns if "prod" in c.lower()), None)
+    min_col  = next((c for c in df.columns if "mín" in c.lower() or "min" in c.lower()), None)
+    max_col  = next((c for c in df.columns if "máx" in c.lower() or "max" in c.lower()), None)
+    freq_col = next((c for c in df.columns if "freq" in c.lower() or "mais" in c.lower()), None)
+
+    if not all([date_col, prod_col, min_col, max_col, freq_col]):
+        return pd.DataFrame()
+
+    df["date"] = pd.to_datetime(df[date_col], dayfirst=True, format="mixed", errors="coerce")
+    df = df.dropna(subset=["date"])
+
+    for col in [min_col, max_col, freq_col]:
+        if df[col].dtype == object:
+            df[col] = df[col].astype(str).str.replace(",", ".").str.strip()
+        df[col] = pd.to_numeric(df[col], errors="coerce").replace(0, pd.NA)
+
+    def categorize(val):
+        v = str(val).lower()
+        if "grainha" in v or "graínha" in v or "semente" in v:
+            return "grainha"
+        elif "triturado" in v or "bagaço" in v:
+            return "triturado"
+        return "inteira"
+
+    df["specie_key"] = df[prod_col].apply(categorize)
+
+    grouped = df.groupby(["date", "specie_key"])[[min_col, max_col, freq_col]].mean().reset_index()
+    grouped = grouped.rename(columns={min_col: "min_v", max_col: "max_v", freq_col: "freq_v"})
+
+    pivoted = grouped.pivot(index="date", columns="specie_key", values=["min_v", "max_v", "freq_v"])
+    pivoted.columns = [f"{col[1]}_{col[0].replace('_v', '')}" for col in pivoted.columns]
+
+    for c in ["inteira_freq", "inteira_min", "inteira_max",
+              "grainha_freq", "grainha_min", "grainha_max",
+              "triturado_freq", "triturado_min", "triturado_max"]:
+        if c not in pivoted.columns:
+            pivoted[c] = pd.NA
+
+    final = pivoted.reset_index().sort_values("date").reset_index(drop=True)
+    val_cols = [c for c in final.columns if c != "date"]
+    final[val_cols] = final[val_cols].ffill()
+    return final
+
+
+# --- 6. LOAD DATA ---
+raw_sima_data = sync_and_get_master_data()
+df_all = process_data(raw_sima_data)
+
+if df_all.empty:
+    st.warning("No SIMA data found. Place your SIMA export CSV in this folder and restart.")
+    st.stop()
+
+last_date = df_all["date"].max().strftime("%Y-%m-%d")
+
+# --- 7. SIDEBAR ---
+st.sidebar.header("⚙️ Filters")
+
+if st.sidebar.button("🔄 Sync Latest SIMA Quotes"):
+    st.cache_data.clear()
+    raw_sima_data = sync_and_get_master_data()
+    df_all = process_data(raw_sima_data)
+    st.sidebar.success("Synced!")
+
+time_range = st.sidebar.radio("Range:", ["All Time", "5 Years", "1 Year", "6 Months"], index=0)
 max_date = df_all["date"].max()
+if time_range == "6 Months":
+    min_date = max_date - pd.DateOffset(months=6)
+elif time_range == "1 Year":
+    min_date = max_date - pd.DateOffset(years=1)
+elif time_range == "5 Years":
+    min_date = max_date - pd.DateOffset(years=5)
+else:
+    min_date = df_all["date"].min()
 
-# --- 6. HEADER & LATEST PRICE OVERVIEW CARDS ---
-st.title("🌾 Carob Price Tracker")
-st.caption(f"Historical trends & market analysis ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})")
+df = df_all[(df_all["date"] >= min_date) & (df_all["date"] <= max_date)].copy()
 
-latest_row = df_all.iloc[-1]
-card_cols = st.columns(3)
+unit_mode = st.sidebar.selectbox("Unit:", ["EUR / kg", "EUR / arroba (15 kg)"])
+multiplier = 15.0 if "arroba" in unit_mode else 1.0
+unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
-card_data = [
-    ("Alfarroba Inteira", "inteira", "inteira"),
-    ("Alfarroba Graínha", "grainha", "grainha"),
-    ("Alfarroba Triturado Grosso", "triturado", "triturado"),
-]
+selected_cats = st.sidebar.multiselect(
+    "Categories:",
+    ["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
+    default=["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
+)
+selected_price_types = st.sidebar.multiselect(
+    "Price Types:",
+    ["Mais Frequente (Freq)", "Mínimo (Min)", "Máximo (Max)"],
+    default=["Mais Frequente (Freq)"],
+)
 
-for col, (title, key, css_class) in zip(card_cols, card_data):
-    with col:
-        freq_v = latest_row.get(f"{key}_freq") * multiplier if pd.notna(latest_row.get(f"{key}_freq")) else None
-        min_v = latest_row.get(f"{key}_min") * multiplier if pd.notna(latest_row.get(f"{key}_min")) else None
-        max_v = latest_row.get(f"{key}_max") * multiplier if pd.notna(latest_row.get(f"{key}_max")) else None
-        
-        freq_str = f"{freq_v:.2f} {unit_label}" if freq_v else "N/A"
-        min_str = f"{min_v:.2f} {unit_label}" if min_v else "N/A"
-        max_str = f"{max_v:.2f} {unit_label}" if max_v else "N/A"
+# --- 8. HEADER ---
+st.title("🌿 Algarve Carob Market Prices")
+st.caption(f"🟢 Live SIMA data | Latest entry: {last_date}")
 
-        st.markdown(
-            f'<div class="price-card {css_class}">'
-            f'<div class="card-title">{title}</div>'
-            f'<div class="card-row"><span>Freq:</span><span class="card-val">{freq_str}</span></div>'
-            f'<div class="card-row"><span>Min:</span><span class="card-val">{min_str}</span></div>'
-            f'<div class="card-row"><span>Max:</span><span class="card-val">{max_str}</span></div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+# --- 9. METRIC CARDS ---
+st.markdown("### 📍 Current Quotes")
+latest = df_all.iloc[-1]
 
-# --- 7. PRICE CHANGE COMPARISON SECTION ---
+def fmt(val):
+    return f"{val * multiplier:.2f} {unit_label}" if pd.notna(val) else "N/A"
+
+def price_card(title, css_class, freq_key, min_key, max_key):
+    st.markdown(f"""
+    <div class="price-card {css_class}">
+        <div class="card-title">{title}</div>
+        <div class="card-row"><span>Freq</span><span class="card-val">{fmt(latest.get(freq_key))}</span></div>
+        <div class="card-row"><span>Min</span><span class="card-val">{fmt(latest.get(min_key))}</span></div>
+        <div class="card-row"><span>Max</span><span class="card-val">{fmt(latest.get(max_key))}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+price_card("🟠 Alfarroba Inteira",          "inteira",   "inteira_freq",   "inteira_min",   "inteira_max")
+price_card("🔵 Alfarroba Graínha",           "grainha",   "grainha_freq",   "grainha_min",   "grainha_max")
+price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "triturado_min", "triturado_max")
+
+# --- 9.5. PRICE COMPARISON ---
 st.markdown("### 📊 Price Change Comparison")
 
 comp_col_select, comp_col_toggle = st.columns([3, 2])
@@ -325,6 +402,7 @@ else:
 
     st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
 
+    # Build clean HTML without line indentation (prevents Markdown code-block parsing)
     categories_info = [
         ("🟠 Inteira",   "inteira"),
         ("🔵 Graínha",   "grainha"),
@@ -367,7 +445,27 @@ else:
 
     st.markdown("".join(grid_parts), unsafe_allow_html=True)
 
-# --- 8. PLOTLY CHART BUILDER FUNCTION ---
+st.divider()
+
+# --- 10. CHART ---
+line_styles = {"Mais Frequente (Freq)": "solid", "Mínimo (Min)": "dash", "Máximo (Max)": "dot"}
+cat_colors  = {
+    "Alfarroba Inteira": "#D97706",
+    "Alfarroba Graínha": "#2563EB",
+    "Alfarroba Triturado Grosso": "#059669",
+}
+field_map = {
+    ("Alfarroba Inteira",          "Mais Frequente (Freq)"): "inteira_freq",
+    ("Alfarroba Inteira",          "Mínimo (Min)"):          "inteira_min",
+    ("Alfarroba Inteira",          "Máximo (Max)"):          "inteira_max",
+    ("Alfarroba Graínha",          "Mais Frequente (Freq)"): "grainha_freq",
+    ("Alfarroba Graínha",          "Mínimo (Min)"):          "grainha_min",
+    ("Alfarroba Graínha",          "Máximo (Max)"):          "grainha_max",
+    ("Alfarroba Triturado Grosso", "Mais Frequente (Freq)"): "triturado_freq",
+    ("Alfarroba Triturado Grosso", "Mínimo (Min)"):          "triturado_min",
+    ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
+}
+
 def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_start=None, highlight_end=None):
     fig = go.Figure()
 
@@ -383,23 +481,24 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         "Máximo (Max)": "Max"
     }
 
+    # Track visible Y values in the selected date window for dynamic vertical zoom
     all_visible_y_values = []
 
-    # Slice dataset for calculating vertical Y-axis dynamic zoom bounds
+    # Slice data for calculating dynamic Y-axis bounds
     if crop_start and crop_end:
         mask = (df["date"] >= pd.Timestamp(crop_start)) & (df["date"] <= pd.Timestamp(crop_end))
         df_slice = df[mask]
     else:
         df_slice = df
 
-    # Order loop: ptype first, then cat -> 3 horizontal columns in plot legend
     for ptype in selected_price_types:
         for cat in categories_to_plot:
             col_name = field_map.get((cat, ptype))
             if col_name and col_name in df.columns:
+                # Full series for chart line rendering
                 y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
                 
-                # Visible subset for Y-range dynamic bounds
+                # Visible slice for Y-scale dynamic calculation
                 y_slice = pd.to_numeric(df_slice[col_name], errors="coerce").dropna() * multiplier
                 if not y_slice.empty:
                     all_visible_y_values.extend(y_slice.tolist())
@@ -418,29 +517,23 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
                     )
                 )
 
-    xaxis_config = dict(
-        type="date",
-        gridcolor="rgba(255, 255, 255, 0.08)",
-        zerolinecolor="rgba(255, 255, 255, 0.15)",
-    )
-    
+    xaxis_config = dict(type="date")
     yaxis_config = dict(
         type="linear",
         tickformat=".2f" if multiplier == 1.0 else ".1f",
-        gridcolor="rgba(255, 255, 255, 0.08)",
-        zerolinecolor="rgba(255, 255, 255, 0.15)",
     )
 
+    # Set X-axis date range
     if crop_start and crop_end:
         xaxis_config["range"] = [crop_start, crop_end]
 
-    # Calculate dynamic Y-axis scale based strictly on visible window data
+    # Calculate dynamic Y-axis scale based ONLY on visible data
     if all_visible_y_values:
         y_min = min(all_visible_y_values)
         y_max = max(all_visible_y_values)
         y_span = y_max - y_min
         
-        # 8% top and bottom padding
+        # Add 8% padding top and bottom so lines don't hit edge boundaries
         padding = y_span * 0.08 if y_span > 0 else (y_max * 0.05 if y_max > 0 else 0.5)
         
         calculated_min = max(0, y_min - padding)
@@ -479,7 +572,6 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         xaxis=xaxis_config,
         yaxis=yaxis_config,
         
-        # 3-COLUMN FRACTION LEGEND GRID
         legend=dict(
             orientation="h",
             entrywidthmode="fraction",
@@ -493,21 +585,129 @@ def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_st
         
         margin=dict(t=50, b=130, l=45, r=20), 
         hovermode="x unified",
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        template="plotly_white",
         height=580,
     )
     return fig
+    
+# --- NEW UPDATED CODE ---
+st.markdown("### 📈 Interactive Price Chart")
 
-# --- 9. RENDER CHART ---
-st.markdown("### 📈 Interactive Price History")
-fig = build_chart(categories_to_plot, crop_start, crop_end, chart_h_start, chart_h_end)
-st.plotly_chart(fig, use_container_width=True)
+# Dedicated Chart Zoom Control Bar
+chart_ctrl_1, chart_ctrl_2 = st.columns([3, 1])
 
-# --- 10. RAW DATA & DISCLAIMER ---
-with st.expander("📋 View Raw Dataset"):
-    st.dataframe(df_all, use_container_width=True)
+with chart_ctrl_1:
+    enable_custom_chart_zoom = st.checkbox("🔍 Apply custom date window to graph view only", value=False)
 
-st.markdown("---")
-st.caption("⚠️ **Disclaimer:** For informational purposes only. Data provided as-is without guarantee of real-time accuracy.")
+with chart_ctrl_2:
+    reset_chart_view = st.button("🔄 Reset Zoom", use_container_width=True, help="Reset graph to default view")
+
+# Handle Custom Chart Window vs Default Crop
+if enable_custom_chart_zoom:
+    cz_col1, cz_col2 = st.columns(2)
+    with cz_col1:
+        cz_start = st.date_input(
+            "Graph Zoom Start:",
+            value=(latest_date - pd.DateOffset(months=6)).date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="cz_start_key"
+        )
+    with cz_col2:
+        cz_end = st.date_input(
+            "Graph Zoom End:",
+            value=latest_date.date(),
+            min_value=min_available_date.date(),
+            max_value=latest_date.date(),
+            key="cz_end_key"
+        )
+    active_crop_start = pd.Timestamp(cz_start)
+    active_crop_end = pd.Timestamp(cz_end)
+else:
+    active_crop_start = crop_start
+    active_crop_end = crop_end
+
+# Triggering "Reset Zoom" clears the crop boundaries back to default view
+if reset_chart_view:
+    active_crop_start = None
+    active_crop_end = None
+
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
+)
+
+chart_config = {
+    "displayModeBar": "hover",
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
+}
+
+with tab1:
+    st.plotly_chart(
+        build_chart(selected_cats, active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
+        use_container_width=True, 
+        key="all", 
+        config=chart_config
+    )
+with tab2:
+    st.plotly_chart(
+        build_chart(["Alfarroba Inteira"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
+        use_container_width=True, 
+        key="inteira", 
+        config=chart_config
+    )
+with tab3:
+    st.plotly_chart(
+        build_chart(["Alfarroba Graínha"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
+        use_container_width=True, 
+        key="grainha", 
+        config=chart_config
+    )
+with tab4:
+    st.plotly_chart(
+        build_chart(["Alfarroba Triturado Grosso"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
+        use_container_width=True, 
+        key="triturado", 
+        config=chart_config
+    )
+# --- 11. RAW DATA TABLE ---
+with st.expander("📋 Raw Data"):
+    table_df = df.copy()
+    num_cols = [c for c in table_df.columns if c != "date"]
+    if multiplier != 1.0:
+        for col in num_cols:
+            table_df[col] = table_df[col] * multiplier
+    table_df["date"] = table_df["date"].dt.strftime("%d/%m/%Y")
+    st.dataframe(
+        table_df[["date"] + num_cols].sort_values("date", ascending=False),
+        use_container_width=True,
+    )
+
+# --- 12. DATA SOURCES & LEGAL DISCLAIMERS ---
+st.divider()
+
+col_source, col_disclaimer = st.columns(2)
+
+with col_source:
+    st.markdown("""
+    ### ℹ️ Data Sources & Attribution
+    
+    * **Primary Source:** **SIMA** (*Sistema de Informação de Mercados Agrícolas*)
+    * **Publishing Entity:** **GPP** (*Gabinete de Planeamento, Políticas e Administração Geral — Ministério da Agricultura e Pescas*)
+    * **Platform Notice:** This dashboard is an **independent platform** designed to visualize publicly available agricultural data. It is not officially affiliated with or endorsed by GPP or SIMA.
+    """)
+
+with col_disclaimer:
+    st.markdown("""
+    ### ⚠️ Legal & Trading Disclaimer
+    
+    * **Informational Use Only:** All prices, trends, and statistics are presented strictly for general historical reference and analytical purposes.
+    * **No Financial or Commercial Advice:** Data published here does **not** constitute commercial valuation, trading advice, or binding contract price fixing.
+    * **Limitation of Liability:** The project maintainers accept no responsibility for commercial transactions, harvest negotiations, or financial losses resulting from reliance on this data.
+    """)
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.caption(
+    "🌿 **Algarve Carob Market Tracker** | Open-source platform licensed under "
+    "[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/)."
+)
