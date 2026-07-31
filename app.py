@@ -1,123 +1,158 @@
-# app.py
+# app.py — Algarve Carob Market Prices
 import os
 import io
 from datetime import datetime, timedelta
+
 import requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# --- 1. STREAMLIT CONFIG ---
+# ============================================================
+# 1. PAGE CONFIG (must be first Streamlit call)
+# ============================================================
 st.set_page_config(
-    page_title="Algarve Carob Market Tracker",
+    page_title="Algarve Carob Market Prices",
     layout="wide",
     page_icon="🌿",
 )
 
-# --- 2. MOBILE CSS ---
+# ============================================================
+# 2. DESIGN SYSTEM — grounded in the actual product, not a
+#    generic dashboard palette. Colors are drawn from the
+#    real materials: dried pod (pulp), cleaned seed, and
+#    crushed kibble.
+# ============================================================
 st.markdown("""
 <style>
-/* Prevent page horizontal scrolling/overflow */
-html, body, [data-testid="stAppViewContainer"], .main {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg:        #16130F;
+    --surface:   #241E17;
+    --surface-2: #2C251C;
+    --text:      #E8DFC8;
+    --text-dim:  #A69D8A;
+    --pulp:      #B5652D;   /* Alfarroba Inteira — dried pod */
+    --seed:      #8B7355;   /* Alfarroba Graínha — cleaned seed */
+    --kibble:    #5B6B4F;   /* Triturado Grosso — crushed kibble */
+    --delta-up:  #7A9B76;
+    --delta-down:#B25C4F;
+}
+
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+.eyebrow {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 0.15rem;
+}
+.display-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 2.1rem;
+    color: var(--text);
+    margin: 0 0 0.3rem 0;
+    line-height: 1.15;
+}
+
+.card {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    border-left: 3px solid;
+}
+.card.pulp   { border-color: var(--pulp); }
+.card.seed   { border-color: var(--seed); }
+.card.kibble { border-color: var(--kibble); }
+
+.card-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+.card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+.card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.86rem;
+    color: var(--text-dim);
+    padding: 2px 0;
+}
+.card-val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text);
+}
+.delta-badge {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-variant-numeric: tabular-nums;
+}
+.delta-up   { background: rgba(122,155,118,0.18); color: var(--delta-up); }
+.delta-down { background: rgba(178,92,79,0.18);  color: var(--delta-down); }
+.delta-flat { background: rgba(166,157,138,0.15); color: var(--text-dim); }
+
+.section-divider {
+    border: none;
+    border-top: 1px solid var(--surface-2);
+    margin: 1.6rem 0 1.2rem 0;
 }
 
 @media (max-width: 768px) {
-    .block-container { padding: 1rem 0.5rem !important; }
+    .block-container { padding: 1rem 0.75rem !important; }
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+    .display-title { font-size: 1.5rem; }
     [data-testid="stTabs"] > div:first-child {
         overflow-x: auto !important;
         white-space: nowrap !important;
     }
-    h1 { font-size: 1.3rem !important; }
-    h3 { font-size: 1.05rem !important; }
 }
-
-/* Top Price Cards */
-.price-card {
-    background: #1e1e1e;
-    border-radius: 12px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
-    border-left: 4px solid;
-}
-.price-card.inteira   { border-color: #D97706; }
-.price-card.grainha   { border-color: #2563EB; }
-.price-card.triturado { border-color: #059669; }
-.card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #fff; }
-.card-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; padding: 2px 0; }
-.card-val { font-weight: 600; color: #fff; }
-
-/* Strict 3-Column Comparison Grid for PC & Mobile */
-.comp-container {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    gap: 6px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    margin-top: 10px !important;
-}
-.comp-col {
-    flex: 1 1 33.33% !important;
-    min-width: 0 !important;
-    background: #18181b !important;
-    border-radius: 8px !important;
-    padding: 8px 6px !important;
-    border: 1px solid #27272a !important;
-    box-sizing: border-box !important;
-}
-.comp-header {
-    font-size: 0.78rem !important;
-    font-weight: 700 !important;
-    margin-bottom: 8px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    color: #f4f4f5 !important;
-}
-.comp-metric-item {
-    margin-bottom: 6px !important;
-    padding-bottom: 4px !important;
-    border-bottom: 1px solid #27272a !important;
-}
-.comp-metric-item:last-child {
-    border-bottom: none !important;
-    margin-bottom: 0 !important;
-}
-.comp-label {
-    font-size: 0.65rem !important;
-    color: #a1a1aa !important;
-    display: block !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-}
-.comp-val {
-    font-size: 0.80rem !important;
-    font-weight: 600 !important;
-    color: #ffffff !important;
-    display: block !important;
-    line-height: 1.2 !important;
-}
-.comp-delta {
-    font-size: 0.65rem !important;
-    font-weight: 600 !important;
-    display: inline-block !important;
-    padding: 1px 4px !important;
-    border-radius: 4px !important;
-    margin-top: 2px !important;
-}
-.comp-delta.pos { background: rgba(34, 197, 94, 0.15) !important; color: #4ade80 !important; }
-.comp-delta.neg { background: rgba(239, 68, 68, 0.15) !important; color: #f87171 !important; }
-.comp-delta.neutral { background: rgba(161, 161, 170, 0.15) !important; color: #a1a1aa !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. CONSTANTS ---
+# ============================================================
+# 3. CONSTANTS
+# ============================================================
 MASTER_FILE = "sima_master.csv"
 GET_COTACOES_URL = "https://regsima.gpp.pt/regsima/consulta/get_cotacoes"
 
-# --- 4. DATA FETCHING ---
+CATEGORY_META = {
+    "Alfarroba Inteira":          {"key": "inteira",   "css": "pulp",   "color": "#B5652D", "short": "Inteira"},
+    "Alfarroba Graínha":          {"key": "grainha",   "css": "seed",   "color": "#8B7355", "short": "Graínha"},
+    "Alfarroba Triturado Grosso": {"key": "triturado", "css": "kibble", "color": "#5B6B4F", "short": "Triturado"},
+}
+
+PRICE_TYPE_META = {
+    "Mais Frequente (Freq)": {"field": "freq", "dash": "solid"},
+    "Mínimo (Min)":          {"field": "min",  "dash": "dash"},
+    "Máximo (Max)":          {"field": "max",  "dash": "dot"},
+}
+
+# ============================================================
+# 4. DATA FETCHING (cached — avoids hitting SIMA on every rerun)
+# ============================================================
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_latest_sima_data(weeks_back=8):
     end = datetime.now()
     start = end - timedelta(weeks=weeks_back)
@@ -134,10 +169,11 @@ def fetch_latest_sima_data(weeks_back=8):
         res.encoding = "windows-1252"
         return pd.read_csv(io.StringIO(res.text), sep=";")
     except Exception as e:
-        st.warning(f"Could not auto-fetch SIMA data: {e}")
+        st.warning(f"Could not reach SIMA: {e}")
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def sync_and_get_master_data():
     local_df = pd.DataFrame()
     if os.path.exists(MASTER_FILE):
@@ -172,8 +208,10 @@ def sync_and_get_master_data():
     return local_df
 
 
-# --- 5. DATA PROCESSING ---
-@st.cache_data(ttl=300)
+# ============================================================
+# 5. DATA PROCESSING
+# ============================================================
+@st.cache_data(ttl=3600, show_spinner=False)
 def process_data(df_raw):
     if df_raw.empty:
         return pd.DataFrame()
@@ -226,452 +264,232 @@ def process_data(df_raw):
     return final
 
 
-# --- 6. LOAD DATA ---
+# ============================================================
+# 6. SHARED HELPERS (removes the duplicated date-offset logic
+#    that previously existed in two places)
+# ============================================================
+def resolve_period_start(period_label, latest_date, earliest_date):
+    """Single source of truth for turning a human period label into a start date."""
+    if period_label in ("All Time", "Max (All Time)"):
+        return earliest_date
+    if period_label == "Year-to-Date (YTD)":
+        return pd.Timestamp(year=latest_date.year, month=1, day=1)
+    offsets = {
+        "1 Week": {"weeks": 1}, "1 Month": {"months": 1}, "3 Months": {"months": 3},
+        "6 Months": {"months": 6}, "1 Year": {"years": 1}, "5 Years": {"years": 5},
+    }
+    kwargs = offsets.get(period_label)
+    return latest_date - pd.DateOffset(**kwargs) if kwargs else earliest_date
+
+
+def fmt_price(val, multiplier, unit_label):
+    return f"{val * multiplier:.2f} {unit_label}" if pd.notna(val) else "N/A"
+
+
+def render_card(category_label, freq, min_v, max_v, multiplier, unit_label, delta_pct=None):
+    """One card component used everywhere prices are shown — the current
+    snapshot and the comparison grid both call this, so both look identical."""
+    meta = CATEGORY_META[category_label]
+    delta_html = ""
+    if delta_pct is not None:
+        cls = "delta-up" if delta_pct > 0.05 else "delta-down" if delta_pct < -0.05 else "delta-flat"
+        arrow = "▲" if delta_pct > 0.05 else "▼" if delta_pct < -0.05 else "–"
+        delta_html = f'<span class="delta-badge {cls}">{arrow} {abs(delta_pct):.1f}%</span>'
+
+    st.markdown(f"""
+    <div class="card {meta['css']}">
+        <div class="card-label">{meta['short']}</div>
+        <div class="card-title">{category_label} {delta_html}</div>
+        <div class="card-row"><span>Freq</span><span class="card-val">{fmt_price(freq, multiplier, unit_label)}</span></div>
+        <div class="card-row"><span>Min</span><span class="card-val">{fmt_price(min_v, multiplier, unit_label)}</span></div>
+        <div class="card-row"><span>Max</span><span class="card-val">{fmt_price(max_v, multiplier, unit_label)}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ============================================================
+# 7. LOAD DATA
+# ============================================================
 raw_sima_data = sync_and_get_master_data()
 df_all = process_data(raw_sima_data)
 
 if df_all.empty:
-    st.warning("No SIMA data found. Place your SIMA export CSV in this folder and restart.")
+    st.warning("No SIMA data found. Place a SIMA export CSV in this folder and restart.")
     st.stop()
 
 last_date = df_all["date"].max().strftime("%Y-%m-%d")
+earliest_date = df_all["date"].min()
+latest_date = df_all["date"].max()
 
-# --- 7. SIDEBAR ---
-st.sidebar.header("⚙️ Filters")
+# ============================================================
+# 8. SIDEBAR
+# ============================================================
+st.sidebar.header("Filters")
 
-if st.sidebar.button("🔄 Sync Latest SIMA Quotes"):
+if st.sidebar.button("Refresh SIMA data"):
     st.cache_data.clear()
-    raw_sima_data = sync_and_get_master_data()
-    df_all = process_data(raw_sima_data)
-    st.sidebar.success("Synced!")
+    st.rerun()
 
-time_range = st.sidebar.radio("Range:", ["All Time", "5 Years", "1 Year", "6 Months"], index=0)
-max_date = df_all["date"].max()
-if time_range == "6 Months":
-    min_date = max_date - pd.DateOffset(months=6)
-elif time_range == "1 Year":
-    min_date = max_date - pd.DateOffset(years=1)
-elif time_range == "5 Years":
-    min_date = max_date - pd.DateOffset(years=5)
-else:
-    min_date = df_all["date"].min()
+time_range = st.sidebar.radio("Range", ["All Time", "5 Years", "1 Year", "6 Months"], index=0)
+min_date = resolve_period_start(time_range, latest_date, earliest_date)
+max_date = latest_date
 
 df = df_all[(df_all["date"] >= min_date) & (df_all["date"] <= max_date)].copy()
 
-unit_mode = st.sidebar.selectbox("Unit:", ["EUR / kg", "EUR / arroba (15 kg)"])
+unit_mode = st.sidebar.selectbox("Unit", ["EUR / kg", "EUR / arroba (15 kg)"])
 multiplier = 15.0 if "arroba" in unit_mode else 1.0
 unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
 selected_cats = st.sidebar.multiselect(
-    "Categories:",
-    ["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
-    default=["Alfarroba Inteira", "Alfarroba Graínha", "Alfarroba Triturado Grosso"],
+    "Categories", list(CATEGORY_META.keys()), default=list(CATEGORY_META.keys())
 )
 selected_price_types = st.sidebar.multiselect(
-    "Price Types:",
-    ["Mais Frequente (Freq)", "Mínimo (Min)", "Máximo (Max)"],
-    default=["Mais Frequente (Freq)"],
+    "Price types", list(PRICE_TYPE_META.keys()), default=["Mais Frequente (Freq)"]
 )
 
-# --- 8. HEADER ---
-st.title("🌿 Algarve Carob Market Prices")
-st.caption(f"🟢 Live SIMA data | Latest entry: {last_date}")
+# ============================================================
+# 9. HEADER
+# ============================================================
+st.markdown('<div class="eyebrow">Algarve · SIMA Market Data</div>', unsafe_allow_html=True)
+st.markdown('<div class="display-title">Carob Market Prices</div>', unsafe_allow_html=True)
+st.caption(f"Latest entry {last_date} · farm-gate quotes, Alfarroba Inteira / Graínha / Triturado Grosso")
 
-# --- 9. METRIC CARDS ---
-st.markdown("### 📍 Current Quotes")
+# ============================================================
+# 10. CURRENT SNAPSHOT
+# ============================================================
+st.markdown("### Current quotes")
 latest = df_all.iloc[-1]
-
-def fmt(val):
-    return f"{val * multiplier:.2f} {unit_label}" if pd.notna(val) else "N/A"
-
-def price_card(title, css_class, freq_key, min_key, max_key):
-    st.markdown(f"""
-    <div class="price-card {css_class}">
-        <div class="card-title">{title}</div>
-        <div class="card-row"><span>Freq</span><span class="card-val">{fmt(latest.get(freq_key))}</span></div>
-        <div class="card-row"><span>Min</span><span class="card-val">{fmt(latest.get(min_key))}</span></div>
-        <div class="card-row"><span>Max</span><span class="card-val">{fmt(latest.get(max_key))}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-price_card("🟠 Alfarroba Inteira",          "inteira",   "inteira_freq",   "inteira_min",   "inteira_max")
-price_card("🔵 Alfarroba Graínha",           "grainha",   "grainha_freq",   "grainha_min",   "grainha_max")
-price_card("🟢 Alfarroba Triturado Grosso",  "triturado", "triturado_freq", "triturado_min", "triturado_max")
-
-# --- 9.5. PRICE COMPARISON ---
-st.markdown("### 📊 Price Change Comparison")
-
-comp_col_select, comp_col_toggle = st.columns([3, 2])
-
-with comp_col_select:
-    comp_period = st.selectbox(
-        "Compare price changes across period:",
-        [
-            "None (Off)",
-            "1 Week", 
-            "1 Month", 
-            "3 Months", 
-            "6 Months", 
-            "Year-to-Date (YTD)", 
-            "1 Year", 
-            "5 Years", 
-            "Max (All Time)",
-            "📅 Custom Date Range"
-        ],
-        index=0
-    )
-
-with comp_col_toggle:
-    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-    show_highlight = st.checkbox(
-        "Highlight period on chart", 
-        value=False, 
-        disabled=(comp_period == "None (Off)")
-    )
-
-latest_date = df_all["date"].max()
-min_available_date = df_all["date"].min()
-
-if comp_period == "None (Off)":
-    start_date = None
-    end_date = None
-    crop_start = None
-    crop_end = None
-    chart_h_start = None
-    chart_h_end = None
-    st.info("💡 Select a time period or custom range above to compare price changes.")
-
-else:
-    if comp_period == "📅 Custom Date Range":
-        col_start, col_end = st.columns(2)
-        with col_start:
-            picked_start = st.date_input(
-                "Start Date:",
-                value=(latest_date - pd.DateOffset(months=1)).date(),
-                min_value=min_available_date.date(),
-                max_value=latest_date.date(),
-                key="comp_start_date"
-            )
-        with col_end:
-            picked_end = st.date_input(
-                "End Date:",
-                value=latest_date.date(),
-                min_value=min_available_date.date(),
-                max_value=latest_date.date(),
-                key="comp_end_date"
-            )
-        
-        if picked_start > picked_end:
-            st.error("⚠️ Start date cannot be later than End date.")
-            start_date = pd.Timestamp(picked_start)
-            end_date = pd.Timestamp(picked_start)
-        else:
-            start_date = pd.Timestamp(picked_start)
-            end_date = pd.Timestamp(picked_end)
-    else:
-        end_date = latest_date
-        if comp_period == "1 Week":
-            start_date = latest_date - pd.DateOffset(weeks=1)
-        elif comp_period == "1 Month":
-            start_date = latest_date - pd.DateOffset(months=1)
-        elif comp_period == "3 Months":
-            start_date = latest_date - pd.DateOffset(months=3)
-        elif comp_period == "6 Months":
-            start_date = latest_date - pd.DateOffset(months=6)
-        elif comp_period == "Year-to-Date (YTD)":
-            start_date = pd.Timestamp(year=latest_date.year, month=1, day=1)
-        elif comp_period == "1 Year":
-            start_date = latest_date - pd.DateOffset(years=1)
-        elif comp_period == "5 Years":
-            start_date = latest_date - pd.DateOffset(years=5)
-        else:
-            start_date = min_available_date
-
-    crop_start = start_date
-    crop_end = end_date
-    chart_h_start = start_date if show_highlight else None
-    chart_h_end = end_date if show_highlight else None
-
-    start_df = df_all[df_all["date"] <= start_date]
-    start_row = start_df.iloc[-1] if not start_df.empty else df_all.iloc[0]
-    actual_start_date_str = start_row["date"].strftime("%d/%m/%Y")
-
-    end_df = df_all[df_all["date"] <= end_date]
-    end_row = end_df.iloc[-1] if not end_df.empty else df_all.iloc[-1]
-    actual_end_date_str = end_row["date"].strftime("%d/%m/%Y")
-
-    st.caption(f"Comparing baseline prices from **{actual_start_date_str}** to **{actual_end_date_str}**")
-
-    # Build clean HTML without line indentation (prevents Markdown code-block parsing)
-    categories_info = [
-        ("🟠 Inteira",   "inteira"),
-        ("🔵 Graínha",   "grainha"),
-        ("🟢 Triturado", "triturado"),
-    ]
-
-    grid_parts = ['<div class="comp-container">']
-    for title, key in categories_info:
-        grid_parts.append(f'<div class="comp-col"><div class="comp-header">{title}</div>')
-        for ptype, pkey in [("Freq", f"{key}_freq"), ("Min", f"{key}_min"), ("Max", f"{key}_max")]:
-            end_v = end_row.get(pkey)
-            start_v = start_row.get(pkey)
-            
-            if pd.notna(end_v) and pd.notna(start_v) and start_v > 0:
-                end_val = end_v * multiplier
-                start_val = start_v * multiplier
-                diff = end_val - start_val
-                pct = (diff / start_val) * 100
-                
-                val_str = f"{end_val:.2f} {unit_label}"
-                cls = "pos" if diff > 0 else ("neg" if diff < 0 else "neutral")
-                delta_str = f"{diff:+.2f} ({pct:+.1f}%)"
-                
-                grid_parts.append(
-                    f'<div class="comp-metric-item">'
-                    f'<span class="comp-label">{ptype}</span>'
-                    f'<span class="comp-val">{val_str}</span>'
-                    f'<span class="comp-delta {cls}">{delta_str}</span>'
-                    f'</div>'
-                )
-            else:
-                grid_parts.append(
-                    f'<div class="comp-metric-item">'
-                    f'<span class="comp-label">{ptype}</span>'
-                    f'<span class="comp-val">N/A</span>'
-                    f'</div>'
-                )
-        grid_parts.append('</div>')
-    grid_parts.append('</div>')
-
-    st.markdown("".join(grid_parts), unsafe_allow_html=True)
-
-st.divider()
-
-# --- 10. CHART ---
-line_styles = {"Mais Frequente (Freq)": "solid", "Mínimo (Min)": "dash", "Máximo (Max)": "dot"}
-cat_colors  = {
-    "Alfarroba Inteira": "#D97706",
-    "Alfarroba Graínha": "#2563EB",
-    "Alfarroba Triturado Grosso": "#059669",
-}
-field_map = {
-    ("Alfarroba Inteira",          "Mais Frequente (Freq)"): "inteira_freq",
-    ("Alfarroba Inteira",          "Mínimo (Min)"):          "inteira_min",
-    ("Alfarroba Inteira",          "Máximo (Max)"):          "inteira_max",
-    ("Alfarroba Graínha",          "Mais Frequente (Freq)"): "grainha_freq",
-    ("Alfarroba Graínha",          "Mínimo (Min)"):          "grainha_min",
-    ("Alfarroba Graínha",          "Máximo (Max)"):          "grainha_max",
-    ("Alfarroba Triturado Grosso", "Mais Frequente (Freq)"): "triturado_freq",
-    ("Alfarroba Triturado Grosso", "Mínimo (Min)"):          "triturado_min",
-    ("Alfarroba Triturado Grosso", "Máximo (Max)"):          "triturado_max",
-}
-
-def build_chart(categories_to_plot, crop_start=None, crop_end=None, highlight_start=None, highlight_end=None):
-    fig = go.Figure()
-
-    clean_cat_names = {
-        "Alfarroba Inteira": "Inteira",
-        "Alfarroba Graínha": "Graínha",
-        "Alfarroba Triturado Grosso": "Triturado"
-    }
-
-    clean_ptypes = {
-        "Mais Frequente (Freq)": "Freq",
-        "Mínimo (Min)": "Min",
-        "Máximo (Max)": "Max"
-    }
-
-    # Track visible Y values in the selected date window for dynamic vertical zoom
-    all_visible_y_values = []
-
-    # Slice data for calculating dynamic Y-axis bounds
-    if crop_start and crop_end:
-        mask = (df["date"] >= pd.Timestamp(crop_start)) & (df["date"] <= pd.Timestamp(crop_end))
-        df_slice = df[mask]
-    else:
-        df_slice = df
-
-    for ptype in selected_price_types:
-        for cat in categories_to_plot:
-            col_name = field_map.get((cat, ptype))
-            if col_name and col_name in df.columns:
-                # Full series for chart line rendering
-                y_data = pd.to_numeric(df[col_name], errors="coerce") * multiplier
-                
-                # Visible slice for Y-scale dynamic calculation
-                y_slice = pd.to_numeric(df_slice[col_name], errors="coerce").dropna() * multiplier
-                if not y_slice.empty:
-                    all_visible_y_values.extend(y_slice.tolist())
-
-                short_cat = clean_cat_names.get(cat, cat)
-                short_ptype = clean_ptypes.get(ptype, ptype)
-                trace_label = f"{short_cat} ({short_ptype})"
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=df["date"],
-                        y=y_data,
-                        name=trace_label,
-                        line=dict(color=cat_colors[cat], dash=line_styles[ptype], width=2),
-                        connectgaps=True,
-                    )
-                )
-
-    xaxis_config = dict(type="date")
-    yaxis_config = dict(
-        type="linear",
-        tickformat=".2f" if multiplier == 1.0 else ".1f",
-    )
-
-    # Set X-axis date range
-    if crop_start and crop_end:
-        xaxis_config["range"] = [crop_start, crop_end]
-
-    # Calculate dynamic Y-axis scale based ONLY on visible data
-    if all_visible_y_values:
-        y_min = min(all_visible_y_values)
-        y_max = max(all_visible_y_values)
-        y_span = y_max - y_min
-        
-        # Add 8% padding top and bottom so lines don't hit edge boundaries
-        padding = y_span * 0.08 if y_span > 0 else (y_max * 0.05 if y_max > 0 else 0.5)
-        
-        calculated_min = max(0, y_min - padding)
-        calculated_max = y_max + padding
-        
-        yaxis_config["range"] = [calculated_min, calculated_max]
-        yaxis_config["autorange"] = False
-    else:
-        yaxis_config["autorange"] = True
-
-    if highlight_start and highlight_end:
-        fig.add_vrect(
-            x0=highlight_start,
-            x1=highlight_end,
-            fillcolor="rgba(37, 99, 235, 0.12)",
-            layer="below",
-            line_width=1.5,
-            line_dash="dash",
-            line_color="rgba(37, 99, 235, 0.4)",
-            annotation_text="Comparison Period",
-            annotation_position="top left",
-            annotation_font=dict(size=10, color="#888")
+cols = st.columns(3, gap="medium")
+for col, cat_label in zip(cols, CATEGORY_META.keys()):
+    key = CATEGORY_META[cat_label]["key"]
+    with col:
+        render_card(
+            cat_label,
+            latest.get(f"{key}_freq"), latest.get(f"{key}_min"), latest.get(f"{key}_max"),
+            multiplier, unit_label,
         )
+
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+# ============================================================
+# 11. PRICE CHANGE COMPARISON
+# ============================================================
+st.markdown("### Price change comparison")
+st.caption("Compares the latest quote against a chosen point in the past.")
+
+comp_period = st.selectbox(
+    "Compare latest quote to",
+    ["1 Week", "1 Month", "3 Months", "6 Months", "1 Year", "Custom range"],
+    index=1,
+)
+
+if comp_period == "Custom range":
+    c1, c2 = st.columns(2)
+    picked_start = c1.date_input("From", value=(latest_date - pd.DateOffset(months=1)).date())
+    picked_end = c2.date_input("To (baseline)", value=latest_date.date())
+    if picked_start > picked_end:
+        picked_start, picked_end = picked_end, picked_start
+        st.info("Start and end were swapped to keep a valid range.")
+    baseline_date = pd.Timestamp(picked_start)
+else:
+    baseline_date = resolve_period_start(comp_period, latest_date, earliest_date)
+
+baseline_row = df_all[df_all["date"] <= baseline_date]
+baseline_row = baseline_row.iloc[-1] if not baseline_row.empty else None
+
+comp_cols = st.columns(3, gap="medium")
+for col, cat_label in zip(comp_cols, CATEGORY_META.keys()):
+    key = CATEGORY_META[cat_label]["key"]
+    latest_freq = latest.get(f"{key}_freq")
+    delta_pct = None
+    if baseline_row is not None:
+        base_freq = baseline_row.get(f"{key}_freq")
+        if pd.notna(base_freq) and base_freq != 0 and pd.notna(latest_freq):
+            delta_pct = ((latest_freq - base_freq) / base_freq) * 100
+    with col:
+        render_card(
+            cat_label,
+            latest_freq, latest.get(f"{key}_min"), latest.get(f"{key}_max"),
+            multiplier, unit_label, delta_pct=delta_pct,
+        )
+
+if baseline_row is not None:
+    st.caption(f"Baseline: {baseline_row['date'].strftime('%Y-%m-%d')}")
+
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+# ============================================================
+# 12. CHART
+# ============================================================
+st.markdown("### Price history")
+
+with st.expander("Zoom to a specific window"):
+    use_zoom = st.checkbox("Apply custom zoom", value=False)
+    zoom_start, zoom_end = min_date, max_date
+    if use_zoom:
+        zc1, zc2 = st.columns(2)
+        zoom_start = pd.Timestamp(zc1.date_input("From", value=min_date.date(), key="zoom_start"))
+        zoom_end = pd.Timestamp(zc2.date_input("To", value=max_date.date(), key="zoom_end"))
+        if zoom_start > zoom_end:
+            zoom_start, zoom_end = zoom_end, zoom_start
+            st.info("Start and end were swapped to keep a valid range.")
+
+PLOTLY_DARK_LAYOUT = dict(
+    paper_bgcolor="#16130F",
+    plot_bgcolor="#1D1811",
+    font=dict(color="#E8DFC8", family="Inter, sans-serif"),
+    xaxis=dict(gridcolor="#2C251C", linecolor="#2C251C"),
+)
+
+def build_chart(categories_to_plot):
+    fig = go.Figure()
+    for cat in categories_to_plot:
+        meta = CATEGORY_META[cat]
+        key = meta["key"]
+        for ptype in selected_price_types:
+            pmeta = PRICE_TYPE_META[ptype]
+            col_name = f"{key}_{pmeta['field']}"
+            if col_name in df.columns:
+                fig.add_trace(go.Scatter(
+                    x=df["date"],
+                    y=df[col_name] * multiplier,
+                    name=f"{meta['short']} · {ptype.split(' ')[0]}",
+                    line=dict(color=meta["color"], dash=pmeta["dash"], width=2.2),
+                    connectgaps=True,
+                ))
 
     fig.update_layout(
+        **PLOTLY_DARK_LAYOUT,
         title=dict(
-            text=f"Price History ({min_date.strftime('%Y')} - {max_date.strftime('%Y')})",
-            x=0.01,
-            y=0.98,
-            xanchor="left",
-            yanchor="top",
-            font=dict(size=16)
+            text=f"{min_date.strftime('%Y')} – {max_date.strftime('%Y')}",
+            y=1.0, x=0, xanchor="left", yanchor="top",
+            font=dict(family="Fraunces, serif", size=16),
         ),
+        legend=dict(orientation="h", yanchor="top", y=0.97, xanchor="left", x=0, font=dict(size=11)),
         xaxis_title="Date",
-        yaxis_title=f"Price ({unit_label})",
-        xaxis=xaxis_config,
-        yaxis=yaxis_config,
-        
-        legend=dict(
-            orientation="h",
-            entrywidthmode="fraction",
-            entrywidth=0.33,
-            yanchor="top",
-            y=-0.22,
-            xanchor="center",
-            x=0.5,
-            font=dict(size=9.5),
-        ),
-        
-        margin=dict(t=50, b=130, l=45, r=20), 
+        yaxis=dict(title=f"Price ({unit_label})", type="log", gridcolor="#2C251C"),
         hovermode="x unified",
-        template="plotly_white",
-        height=580,
+        height=460,
+        margin=dict(t=140, b=40, l=50, r=10),
     )
+    if use_zoom:
+        fig.update_xaxes(range=[zoom_start, zoom_end])
     return fig
-    
-# --- NEW UPDATED CODE ---
-st.markdown("### 📈 Interactive Price Chart")
 
-# Dedicated Chart Zoom Control Bar
-chart_ctrl_1, chart_ctrl_2 = st.columns([3, 1])
-
-with chart_ctrl_1:
-    enable_custom_chart_zoom = st.checkbox("🔍 Apply custom date window to graph view only", value=False)
-
-with chart_ctrl_2:
-    reset_chart_view = st.button("🔄 Reset Zoom", use_container_width=True, help="Reset graph to default view")
-
-# Handle Custom Chart Window vs Default Crop
-if enable_custom_chart_zoom:
-    cz_col1, cz_col2 = st.columns(2)
-    with cz_col1:
-        cz_start = st.date_input(
-            "Graph Zoom Start:",
-            value=(latest_date - pd.DateOffset(months=6)).date(),
-            min_value=min_available_date.date(),
-            max_value=latest_date.date(),
-            key="cz_start_key"
-        )
-    with cz_col2:
-        cz_end = st.date_input(
-            "Graph Zoom End:",
-            value=latest_date.date(),
-            min_value=min_available_date.date(),
-            max_value=latest_date.date(),
-            key="cz_end_key"
-        )
-    active_crop_start = pd.Timestamp(cz_start)
-    active_crop_end = pd.Timestamp(cz_end)
-else:
-    active_crop_start = crop_start
-    active_crop_end = crop_end
-
-# Triggering "Reset Zoom" clears the crop boundaries back to default view
-if reset_chart_view:
-    active_crop_start = None
-    active_crop_end = None
-
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📊 All", "🟠 Inteira", "🔵 Graínha", "🟢 Triturado"]
-)
-
-chart_config = {
-    "displayModeBar": "hover",
-    "displaylogo": False,
-    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]
-}
-
+tab1, tab2, tab3, tab4 = st.tabs(["All", "Inteira", "Graínha", "Triturado"])
 with tab1:
-    st.plotly_chart(
-        build_chart(selected_cats, active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
-        use_container_width=True, 
-        key="all", 
-        config=chart_config
-    )
+    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all")
 with tab2:
-    st.plotly_chart(
-        build_chart(["Alfarroba Inteira"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
-        use_container_width=True, 
-        key="inteira", 
-        config=chart_config
-    )
+    st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira")
 with tab3:
-    st.plotly_chart(
-        build_chart(["Alfarroba Graínha"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
-        use_container_width=True, 
-        key="grainha", 
-        config=chart_config
-    )
+    st.plotly_chart(build_chart(["Alfarroba Graínha"]), use_container_width=True, key="grainha")
 with tab4:
-    st.plotly_chart(
-        build_chart(["Alfarroba Triturado Grosso"], active_crop_start, active_crop_end, chart_h_start, chart_h_end), 
-        use_container_width=True, 
-        key="triturado", 
-        config=chart_config
-    )
-# --- 11. RAW DATA TABLE ---
-with st.expander("📋 Raw Data"):
+    st.plotly_chart(build_chart(["Alfarroba Triturado Grosso"]), use_container_width=True, key="triturado")
+
+# ============================================================
+# 13. RAW DATA
+# ============================================================
+with st.expander("Raw data"):
     table_df = df.copy()
     num_cols = [c for c in table_df.columns if c != "date"]
     if multiplier != 1.0:
@@ -683,31 +501,18 @@ with st.expander("📋 Raw Data"):
         use_container_width=True,
     )
 
-# --- 12. DATA SOURCES & LEGAL DISCLAIMERS ---
-st.divider()
-
-col_source, col_disclaimer = st.columns(2)
-
-with col_source:
-    st.markdown("""
-    ### ℹ️ Data Sources & Attribution
-    
-    * **Primary Source:** **SIMA** (*Sistema de Informação de Mercados Agrícolas*)
-    * **Publishing Entity:** **GPP** (*Gabinete de Planeamento, Políticas e Administração Geral — Ministério da Agricultura e Pescas*)
-    * **Platform Notice:** This dashboard is an **independent platform** designed to visualize publicly available agricultural data. It is not officially affiliated with or endorsed by GPP or SIMA.
-    """)
-
-with col_disclaimer:
-    st.markdown("""
-    ### ⚠️ Legal & Trading Disclaimer
-    
-    * **Informational Use Only:** All prices, trends, and statistics are presented strictly for general historical reference and analytical purposes.
-    * **No Financial or Commercial Advice:** Data published here does **not** constitute commercial valuation, trading advice, or binding contract price fixing.
-    * **Limitation of Liability:** The project maintainers accept no responsibility for commercial transactions, harvest negotiations, or financial losses resulting from reliance on this data.
-    """)
-
-st.markdown("<br>", unsafe_allow_html=True)
-st.caption(
-    "🌿 **Algarve Carob Market Tracker** | Open-source platform licensed under "
-    "[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/)."
-)
+# ============================================================
+# 14. FOOTER — DATA SOURCES & DISCLAIMERS
+# ============================================================
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+st.markdown("""
+<div style="font-size: 0.8rem; color: var(--text-dim); line-height: 1.6;">
+<strong>Data source:</strong> GPP / SIMA (regsima.gpp.pt), Portugal's public agricultural market
+information system. Independently collected and processed; not affiliated with or endorsed by
+GPP or IPMA.<br>
+<strong>Code license:</strong> PolyForm Noncommercial 1.0.0 — free for personal, research, and
+noncommercial use. Commercial use requires permission.<br>
+<strong>Disclaimer:</strong> figures shown are informational and may not reflect the exact price
+achievable in any individual transaction. Verify independently before relying on them.
+</div>
+""", unsafe_allow_html=True)
