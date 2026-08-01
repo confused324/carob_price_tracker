@@ -18,10 +18,10 @@ st.set_page_config(
 )
 
 # ============================================================
-# 2. DESIGN SYSTEM — grounded in the actual product, not a
-#    generic dashboard palette. Colors are drawn from the
-#    real materials: dried pod (pulp), cleaned seed, and
-#    crushed kibble.
+# 2. DESIGN SYSTEM — grounded in the actual product. Native
+#    Streamlit widgets (sidebar, radios, selects) are themed
+#    via .streamlit/config.toml, not CSS overrides — more
+#    durable across Streamlit versions.
 # ============================================================
 st.markdown("""
 <style>
@@ -33,9 +33,10 @@ st.markdown("""
     --surface-2: #2C251C;
     --text:      #E8DFC8;
     --text-dim:  #A69D8A;
-    --pulp:      #B5652D;   /* Alfarroba Inteira — dried pod */
-    --seed:      #8B7355;   /* Alfarroba Graínha — cleaned seed */
-    --kibble:    #5B6B4F;   /* Triturado Grosso — crushed kibble */
+    --pulp:      #B5652D;
+    --seed:      #8B7355;
+    --kibble:    #5B6B4F;
+    --accent:    #3D5A5B;
     --delta-up:  #7A9B76;
     --delta-down:#B25C4F;
 }
@@ -43,90 +44,61 @@ st.markdown("""
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 .eyebrow {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin-bottom: 0.15rem;
+    font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 0.15rem;
 }
 .display-title {
-    font-family: 'Fraunces', serif;
-    font-weight: 600;
-    font-size: 2.1rem;
-    color: var(--text);
-    margin: 0 0 0.3rem 0;
-    line-height: 1.15;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 2.1rem;
+    color: var(--text); margin: 0 0 0.3rem 0; line-height: 1.15;
+}
+.chart-heading {
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.3rem;
+    color: var(--text); margin: 0 0 0.5rem 0;
+}
+.chart-legend {
+    display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 0.8rem;
+    font-size: 0.85rem; color: var(--text-dim);
+}
+.chart-legend span.dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
 }
 
 .card {
-    background: var(--surface);
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 12px;
-    border-left: 3px solid;
+    background: var(--surface); border-radius: 10px; padding: 14px 18px;
+    margin-bottom: 12px; border-left: 3px solid;
 }
 .card.pulp   { border-color: var(--pulp); }
 .card.seed   { border-color: var(--seed); }
 .card.kibble { border-color: var(--kibble); }
-
 .card-label {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin-bottom: 4px;
+    font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 4px;
 }
 .card-title {
-    font-family: 'Fraunces', serif;
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
+    font-family: 'Fraunces', serif; font-size: 1.05rem; font-weight: 600;
+    color: var(--text); margin-bottom: 8px;
 }
 .card-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 0.86rem;
-    color: var(--text-dim);
-    padding: 2px 0;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 0.86rem; color: var(--text-dim); padding: 2px 0;
 }
-.card-val {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: var(--text);
-}
+.card-val { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 .delta-badge {
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 1px 7px;
-    border-radius: 20px;
+    font-size: 0.78rem; font-weight: 600; padding: 1px 7px; border-radius: 20px;
     font-variant-numeric: tabular-nums;
 }
 .delta-up   { background: rgba(122,155,118,0.18); color: var(--delta-up); }
 .delta-down { background: rgba(178,92,79,0.18);  color: var(--delta-down); }
 .delta-flat { background: rgba(166,157,138,0.15); color: var(--text-dim); }
 
-.section-divider {
-    border: none;
-    border-top: 1px solid var(--surface-2);
-    margin: 1.6rem 0 1.2rem 0;
-}
+.section-divider { border: none; border-top: 1px solid var(--surface-2); margin: 1.6rem 0 1.2rem 0; }
 
 @media (max-width: 768px) {
     .block-container { padding: 1rem 0.75rem !important; }
-    [data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
-    }
+    [data-testid="column"] { width: 100% !important; flex: 1 1 100% !important; min-width: 100% !important; }
     .display-title { font-size: 1.5rem; }
-    [data-testid="stTabs"] > div:first-child {
-        overflow-x: auto !important;
-        white-space: nowrap !important;
-    }
+    [data-testid="stTabs"] > div:first-child { overflow-x: auto !important; white-space: nowrap !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -142,7 +114,6 @@ CATEGORY_META = {
     "Alfarroba Graínha":          {"key": "grainha",   "css": "seed",   "color": "#8B7355", "short": "Graínha"},
     "Alfarroba Triturado Grosso": {"key": "triturado", "css": "kibble", "color": "#5B6B4F", "short": "Triturado"},
 }
-
 PRICE_TYPE_META = {
     "Mais Frequente (Freq)": {"field": "freq", "dash": "solid"},
     "Mínimo (Min)":          {"field": "min",  "dash": "dash"},
@@ -150,7 +121,7 @@ PRICE_TYPE_META = {
 }
 
 # ============================================================
-# 4. DATA FETCHING (cached — avoids hitting SIMA on every rerun)
+# 4. DATA FETCHING (cached)
 # ============================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_latest_sima_data(weeks_back=8):
@@ -159,8 +130,7 @@ def fetch_latest_sima_data(weeks_back=8):
     params = {
         "setor": 23, "especie": 70, "regiao": 7, "mercado": 69,
         "tipo": 8, "export": 1,
-        "ini": start.strftime("%Y-%m-%d"),
-        "fim": end.strftime("%Y-%m-%d"),
+        "ini": start.strftime("%Y-%m-%d"), "fim": end.strftime("%Y-%m-%d"),
     }
     try:
         res = requests.get(GET_COTACOES_URL, params=params,
@@ -181,7 +151,6 @@ def sync_and_get_master_data():
             local_df = pd.read_csv(MASTER_FILE, sep=";", encoding="utf-8-sig")
         except Exception:
             pass
-
     if local_df.empty:
         for f in os.listdir("."):
             if f.endswith((".csv", ".xlsx", ".xls")) and "sima" in f.lower() and f != MASTER_FILE:
@@ -190,7 +159,6 @@ def sync_and_get_master_data():
                     break
                 except Exception:
                     continue
-
     online_df = fetch_latest_sima_data()
     if not online_df.empty:
         if not local_df.empty:
@@ -201,10 +169,8 @@ def sync_and_get_master_data():
             local_df = combined
         else:
             local_df = online_df
-
     if not local_df.empty:
         local_df.to_csv(MASTER_FILE, sep=";", index=False, encoding="utf-8-sig")
-
     return local_df
 
 
@@ -215,7 +181,6 @@ def sync_and_get_master_data():
 def process_data(df_raw):
     if df_raw.empty:
         return pd.DataFrame()
-
     df = df_raw.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
@@ -224,7 +189,6 @@ def process_data(df_raw):
     min_col  = next((c for c in df.columns if "mín" in c.lower() or "min" in c.lower()), None)
     max_col  = next((c for c in df.columns if "máx" in c.lower() or "max" in c.lower()), None)
     freq_col = next((c for c in df.columns if "freq" in c.lower() or "mais" in c.lower()), None)
-
     if not all([date_col, prod_col, min_col, max_col, freq_col]):
         return pd.DataFrame()
 
@@ -245,10 +209,8 @@ def process_data(df_raw):
         return "inteira"
 
     df["specie_key"] = df[prod_col].apply(categorize)
-
     grouped = df.groupby(["date", "specie_key"])[[min_col, max_col, freq_col]].mean().reset_index()
     grouped = grouped.rename(columns={min_col: "min_v", max_col: "max_v", freq_col: "freq_v"})
-
     pivoted = grouped.pivot(index="date", columns="specie_key", values=["min_v", "max_v", "freq_v"])
     pivoted.columns = [f"{col[1]}_{col[0].replace('_v', '')}" for col in pivoted.columns]
 
@@ -265,11 +227,9 @@ def process_data(df_raw):
 
 
 # ============================================================
-# 6. SHARED HELPERS (removes the duplicated date-offset logic
-#    that previously existed in two places)
+# 6. SHARED HELPERS
 # ============================================================
 def resolve_period_start(period_label, latest_date, earliest_date):
-    """Single source of truth for turning a human period label into a start date."""
     if period_label in ("All Time", "Max (All Time)"):
         return earliest_date
     if period_label == "Year-to-Date (YTD)":
@@ -287,15 +247,12 @@ def fmt_price(val, multiplier, unit_label):
 
 
 def render_card(category_label, freq, min_v, max_v, multiplier, unit_label, delta_pct=None):
-    """One card component used everywhere prices are shown — the current
-    snapshot and the comparison grid both call this, so both look identical."""
     meta = CATEGORY_META[category_label]
     delta_html = ""
     if delta_pct is not None:
         cls = "delta-up" if delta_pct > 0.05 else "delta-down" if delta_pct < -0.05 else "delta-flat"
         arrow = "▲" if delta_pct > 0.05 else "▼" if delta_pct < -0.05 else "–"
         delta_html = f'<span class="delta-badge {cls}">{arrow} {abs(delta_pct):.1f}%</span>'
-
     st.markdown(f"""
     <div class="card {meta['css']}">
         <div class="card-label">{meta['short']}</div>
@@ -322,7 +279,10 @@ earliest_date = df_all["date"].min()
 latest_date = df_all["date"].max()
 
 # ============================================================
-# 8. SIDEBAR
+# 8. SIDEBAR — only genuinely sidebar-appropriate, global
+#    settings live here now. Range and Categories were
+#    removed: both duplicated controls already on the main
+#    page (chart tabs, chart zoom).
 # ============================================================
 st.sidebar.header("Filters")
 
@@ -330,19 +290,10 @@ if st.sidebar.button("Refresh SIMA data"):
     st.cache_data.clear()
     st.rerun()
 
-time_range = st.sidebar.radio("Range", ["All Time", "5 Years", "1 Year", "6 Months"], index=0)
-min_date = resolve_period_start(time_range, latest_date, earliest_date)
-max_date = latest_date
-
-df = df_all[(df_all["date"] >= min_date) & (df_all["date"] <= max_date)].copy()
-
 unit_mode = st.sidebar.selectbox("Unit", ["EUR / kg", "EUR / arroba (15 kg)"])
 multiplier = 15.0 if "arroba" in unit_mode else 1.0
 unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
-selected_cats = st.sidebar.multiselect(
-    "Categories", list(CATEGORY_META.keys()), default=list(CATEGORY_META.keys())
-)
 selected_price_types = st.sidebar.multiselect(
     "Price types", list(PRICE_TYPE_META.keys()), default=["Mais Frequente (Freq)"]
 )
@@ -363,11 +314,8 @@ cols = st.columns(3, gap="medium")
 for col, cat_label in zip(cols, CATEGORY_META.keys()):
     key = CATEGORY_META[cat_label]["key"]
     with col:
-        render_card(
-            cat_label,
-            latest.get(f"{key}_freq"), latest.get(f"{key}_min"), latest.get(f"{key}_max"),
-            multiplier, unit_label,
-        )
+        render_card(cat_label, latest.get(f"{key}_freq"), latest.get(f"{key}_min"),
+                    latest.get(f"{key}_max"), multiplier, unit_label)
 
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
@@ -379,10 +327,8 @@ st.caption("Compares the latest quote against a chosen point in the past.")
 
 comp_period = st.selectbox(
     "Compare latest quote to",
-    ["1 Week", "1 Month", "3 Months", "6 Months", "1 Year", "Custom range"],
-    index=1,
+    ["1 Week", "1 Month", "3 Months", "6 Months", "1 Year", "Custom range"], index=1,
 )
-
 if comp_period == "Custom range":
     c1, c2 = st.columns(2)
     picked_start = c1.date_input("From", value=(latest_date - pd.DateOffset(months=1)).date())
@@ -407,11 +353,8 @@ for col, cat_label in zip(comp_cols, CATEGORY_META.keys()):
         if pd.notna(base_freq) and base_freq != 0 and pd.notna(latest_freq):
             delta_pct = ((latest_freq - base_freq) / base_freq) * 100
     with col:
-        render_card(
-            cat_label,
-            latest_freq, latest.get(f"{key}_min"), latest.get(f"{key}_max"),
-            multiplier, unit_label, delta_pct=delta_pct,
-        )
+        render_card(cat_label, latest_freq, latest.get(f"{key}_min"), latest.get(f"{key}_max"),
+                    multiplier, unit_label, delta_pct=delta_pct)
 
 if baseline_row is not None:
     st.caption(f"Baseline: {baseline_row['date'].strftime('%Y-%m-%d')}")
@@ -419,27 +362,30 @@ if baseline_row is not None:
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # ============================================================
-# 12. CHART
+# 12. CHART — title and legend are now plain Streamlit
+#     elements above the figure, not Plotly-internal ones.
 # ============================================================
-st.markdown("### Price history")
+selected_cats_for_chart = list(CATEGORY_META.keys())
+
+legend_html = '<div class="chart-legend">' + "".join(
+    f'<span><span class="dot" style="background:{m["color"]}"></span>{m["short"]}</span>'
+    for m in CATEGORY_META.values()
+) + '</div>'
+
+st.markdown(f'<div class="chart-heading">Price history</div>{legend_html}', unsafe_allow_html=True)
 
 with st.expander("Zoom to a specific window"):
     use_zoom = st.checkbox("Apply custom zoom", value=False)
-    zoom_start, zoom_end = min_date, max_date
+    zoom_start, zoom_end = earliest_date, latest_date
     if use_zoom:
         zc1, zc2 = st.columns(2)
-        zoom_start = pd.Timestamp(zc1.date_input("From", value=min_date.date(), key="zoom_start"))
-        zoom_end = pd.Timestamp(zc2.date_input("To", value=max_date.date(), key="zoom_end"))
+        zoom_start = pd.Timestamp(zc1.date_input("From", value=earliest_date.date(), key="zoom_start"))
+        zoom_end = pd.Timestamp(zc2.date_input("To", value=latest_date.date(), key="zoom_end"))
         if zoom_start > zoom_end:
             zoom_start, zoom_end = zoom_end, zoom_start
             st.info("Start and end were swapped to keep a valid range.")
 
-PLOTLY_DARK_LAYOUT = dict(
-    paper_bgcolor="#16130F",
-    plot_bgcolor="#1D1811",
-    font=dict(color="#E8DFC8", family="Inter, sans-serif"),
-    xaxis=dict(gridcolor="#2C251C", linecolor="#2C251C"),
-)
+df = df_all
 
 def build_chart(categories_to_plot):
     fig = go.Figure()
@@ -451,26 +397,24 @@ def build_chart(categories_to_plot):
             col_name = f"{key}_{pmeta['field']}"
             if col_name in df.columns:
                 fig.add_trace(go.Scatter(
-                    x=df["date"],
-                    y=df[col_name] * multiplier,
+                    x=df["date"], y=df[col_name] * multiplier,
                     name=f"{meta['short']} · {ptype.split(' ')[0]}",
                     line=dict(color=meta["color"], dash=pmeta["dash"], width=2.2),
                     connectgaps=True,
                 ))
-
     fig.update_layout(
-        **PLOTLY_DARK_LAYOUT,
-        title=dict(
-            text=f"{min_date.strftime('%Y')} – {max_date.strftime('%Y')}",
-            y=1.0, x=0, xanchor="left", yanchor="top",
-            font=dict(family="Fraunces, serif", size=16),
+        paper_bgcolor="#16130F", plot_bgcolor="#1D1811",
+        font=dict(color="#E8DFC8", family="Inter, sans-serif"),
+        showlegend=False,
+        xaxis=dict(title="Date", gridcolor="#2C251C", linecolor="#2C251C"),
+        yaxis=dict(
+            title=f"Price ({unit_label})", type="log",
+            dtick=1,
+            gridcolor="#2C251C",
         ),
-        legend=dict(orientation="h", yanchor="top", y=0.97, xanchor="left", x=0, font=dict(size=11)),
-        xaxis_title="Date",
-        yaxis=dict(title=f"Price ({unit_label})", type="log", gridcolor="#2C251C"),
         hovermode="x unified",
-        height=460,
-        margin=dict(t=140, b=40, l=50, r=10),
+        height=420,
+        margin=dict(t=20, b=40, l=50, r=10),
     )
     if use_zoom:
         fig.update_xaxes(range=[zoom_start, zoom_end])
@@ -478,7 +422,7 @@ def build_chart(categories_to_plot):
 
 tab1, tab2, tab3, tab4 = st.tabs(["All", "Inteira", "Graínha", "Triturado"])
 with tab1:
-    st.plotly_chart(build_chart(selected_cats), use_container_width=True, key="all")
+    st.plotly_chart(build_chart(selected_cats_for_chart), use_container_width=True, key="all")
 with tab2:
     st.plotly_chart(build_chart(["Alfarroba Inteira"]), use_container_width=True, key="inteira")
 with tab3:
@@ -490,19 +434,17 @@ with tab4:
 # 13. RAW DATA
 # ============================================================
 with st.expander("Raw data"):
-    table_df = df.copy()
+    table_df = df_all.copy()
     num_cols = [c for c in table_df.columns if c != "date"]
     if multiplier != 1.0:
         for col in num_cols:
             table_df[col] = table_df[col] * multiplier
     table_df["date"] = table_df["date"].dt.strftime("%d/%m/%Y")
-    st.dataframe(
-        table_df[["date"] + num_cols].sort_values("date", ascending=False),
-        use_container_width=True,
-    )
+    st.dataframe(table_df[["date"] + num_cols].sort_values("date", ascending=False),
+                 use_container_width=True)
 
 # ============================================================
-# 14. FOOTER — DATA SOURCES & DISCLAIMERS
+# 14. FOOTER
 # ============================================================
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 st.markdown("""
