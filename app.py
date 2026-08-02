@@ -63,25 +63,7 @@ html, body, [class*="css"] {
     font-weight: 600; 
     font-size: 1.3rem;
     color: var(--text); 
-    margin: 0 0 0.5rem 0;
-}
-
-.chart-legend {
-    display: flex; 
-    flex-wrap: wrap; 
-    gap: 16px; 
-    margin-bottom: 0.8rem;
-    font-size: 0.85rem; 
-    color: var(--text-dim);
-}
-
-.chart-legend span.dot {
-    display: inline-block; 
-    width: 10px; 
-    height: 10px; 
-    border-radius: 50%;
-    margin-right: 6px; 
-    vertical-align: middle;
+    margin: 0 0 0.8rem 0;
 }
 
 .card {
@@ -165,12 +147,6 @@ CATEGORY_META = {
     "Alfarroba Inteira": {"key": "inteira", "css": "pulp", "color": "#B5652D", "short": "Inteira"},
     "Alfarroba Grainha": {"key": "grainha", "css": "seed", "color": "#8B7355", "short": "Graínha"},
     "Alfarroba Triturado Grosso": {"key": "triturado", "css": "kibble", "color": "#5B6B4F", "short": "Triturado"},
-}
-
-PRICE_TYPE_META = {
-    "Mais Frequente (Freq)": {"field": "freq", "dash": "solid"},
-    "Mínimo (Min)": {"field": "min", "dash": "dash"},
-    "Máximo (Max)": {"field": "max", "dash": "dot"},
 }
 
 def hex_to_rgba(hex_str, opacity=0.15):
@@ -360,14 +336,9 @@ unit_mode = st.sidebar.selectbox("Display Unit", ["EUR/kg", "EUR / arroba (15 kg
 multiplier = 15.0 if "arroba" in unit_mode else 1.0
 unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
-selected_price_types = st.sidebar.multiselect(
-    "Price Types to Plot", list(PRICE_TYPE_META.keys()), default=["Mais Frequente (Freq)"]
-)
-
 st.sidebar.markdown("---")
 st.sidebar.subheader("📈 TradingView & Chart Tools")
 
-# HLC Range & Technical Overlays Controls
 enable_hlc_range = st.sidebar.checkbox("Overlay High-Low (Min-Max) Band", value=True)
 enable_sma = st.sidebar.checkbox("Overlay SMA (Moving Avg)", value=False)
 sma_window = st.sidebar.number_input("SMA Window (weeks)", min_value=2, max_value=52, value=4) if enable_sma else 4
@@ -469,22 +440,21 @@ st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 # 12. TRADINGVIEW-STYLE CHART ENGINE
 # ==========================================
 selected_cats_for_chart = list(CATEGORY_META.keys())
-legend_html = '<div class="chart-legend">' + "".join(
-    f'<span><span class="dot" style="background:{m["color"]}"></span>{m["short"]}</span>'
-    for m in CATEGORY_META.values()
-) + '</div>'
 
-st.markdown(f'<div class="chart-heading">Price History & Analytics</div>{legend_html}', unsafe_allow_html=True)
+st.markdown('<div class="chart-heading">Price History & Analytics</div>', unsafe_allow_html=True)
 
-with st.expander("Zoom or Crop Specific Chart Window"):
-    use_zoom = st.checkbox("Apply custom date filter", value=False)
-    zoom_start, zoom_end = earliest_date, latest_date
-    if use_zoom:
-        zc1, zc2 = st.columns(2)
-        zoom_start = pd.Timestamp(zc1.date_input("From", value=earliest_date.date(), key="z_start"))
-        zoom_end = pd.Timestamp(zc2.date_input("To", value=latest_date.date(), key="z_end"))
-        if zoom_start > zoom_end:
-            zoom_start, zoom_end = zoom_end, zoom_start
+# Custom Date Filter integrated inline next to time ranges
+c_zoom1, c_zoom2, c_zoom3 = st.columns([1, 1, 1.2])
+with c_zoom1:
+    zoom_start = pd.Timestamp(st.date_input("From Date", value=earliest_date.date(), min_value=earliest_date.date(), max_value=latest_date.date(), key="z_start"))
+with c_zoom2:
+    zoom_end = pd.Timestamp(st.date_input("To Date", value=latest_date.date(), min_value=earliest_date.date(), max_value=latest_date.date(), key="z_end"))
+with c_zoom3:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+    use_zoom = st.checkbox("Apply Custom Time Range", value=False)
+
+if zoom_start > zoom_end:
+    zoom_start, zoom_end = zoom_end, zoom_start
 
 def build_chart(categories_to_plot):
     if enable_rsi:
@@ -498,20 +468,11 @@ def build_chart(categories_to_plot):
     else:
         fig = make_subplots(rows=1, cols=1)
 
-    # Active dynamic window for auto-scale calculations
-    active_start = zoom_start if use_zoom else earliest_date
-    active_end = zoom_end if use_zoom else latest_date
-
-    mask = (df_all["date"] >= active_start) & (df_all["date"] <= active_end)
-    df_slice = df_all[mask]
-
-    all_visible_y = []
-
     for cat in categories_to_plot:
         meta = CATEGORY_META[cat]
         key = meta["key"]
 
-        # 1. High-Low (Min-Max) HLC Range Shading
+        # 1. High-Low (Min-Max) Range Band
         if enable_hlc_range:
             col_min = f"{key}_min"
             col_max = f"{key}_max"
@@ -542,98 +503,87 @@ def build_chart(categories_to_plot):
                     row=1, col=1
                 )
 
-        # 2. Main Price Lines & Overlays
-        for ptype in selected_price_types:
-            pmeta = PRICE_TYPE_META[ptype]
-            col_name = f"{key}_{pmeta['field']}"
+        # 2. Main Price Line (Mais Frequente)
+        col_freq = f"{key}_freq"
+        if col_freq in df_all.columns:
+            y_full = df_all[col_freq] * multiplier
 
-            if col_name in df_all.columns:
-                y_full = df_all[col_name] * multiplier
-                
-                # Dynamic range tracking
-                y_slice = df_slice[col_name].dropna() * multiplier
-                if not y_slice.empty:
-                    all_visible_y.extend(y_slice.tolist())
+            fig.add_trace(
+                go.Scatter(
+                    x=df_all["date"],
+                    y=y_full,
+                    name=meta['short'],
+                    line=dict(color=meta["color"], width=2.2),
+                    connectgaps=True,
+                ),
+                row=1, col=1
+            )
 
-                trace_name = f"{meta['short']} ({ptype.split(' ')[0]})"
-
-                # Main Price Line
+            # Moving Average Overlay
+            if enable_sma:
+                sma_series = y_full.rolling(window=sma_window).mean()
                 fig.add_trace(
                     go.Scatter(
                         x=df_all["date"],
-                        y=y_full,
-                        name=trace_name,
-                        line=dict(color=meta["color"], dash=pmeta["dash"], width=2.2),
-                        connectgaps=True,
+                        y=sma_series,
+                        name=f"{meta['short']} SMA ({sma_window}w)",
+                        line=dict(color=meta["color"], width=1.2, dash="dashdot"),
+                        opacity=0.75
                     ),
                     row=1, col=1
                 )
 
-                # Moving Average Overlay
-                if enable_sma and ptype == "Mais Frequente (Freq)":
-                    sma_series = y_full.rolling(window=sma_window).mean()
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_all["date"],
-                            y=sma_series,
-                            name=f"{meta['short']} SMA ({sma_window}w)",
-                            line=dict(color=meta["color"], width=1.2, dash="dashdot"),
-                            opacity=0.75
-                        ),
-                        row=1, col=1
-                    )
+            # Bollinger Bands Overlay
+            if enable_bb:
+                bb_mid = y_full.rolling(20).mean()
+                bb_std = y_full.rolling(20).std()
+                bb_upper = bb_mid + (bb_std * 2)
+                bb_lower = bb_mid - (bb_std * 2)
 
-                # Bollinger Bands Overlay
-                if enable_bb and ptype == "Mais Frequente (Freq)":
-                    bb_mid = y_full.rolling(20).mean()
-                    bb_std = y_full.rolling(20).std()
-                    bb_upper = bb_mid + (bb_std * 2)
-                    bb_lower = bb_mid - (bb_std * 2)
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_all["date"], y=bb_upper,
+                        name=f"{meta['short']} Upper BB",
+                        line=dict(color=meta["color"], width=0.8, dash="dot"),
+                        showlegend=False
+                    ),
+                    row=1, col=1
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_all["date"], y=bb_lower,
+                        name=f"{meta['short']} Lower BB",
+                        line=dict(color=meta["color"], width=0.8, dash="dot"),
+                        fill="tonexty",
+                        fillcolor="rgba(255,255,255,0.03)",
+                        showlegend=False
+                    ),
+                    row=1, col=1
+                )
 
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_all["date"], y=bb_upper,
-                            name=f"{meta['short']} Upper BB",
-                            line=dict(color=meta["color"], width=0.8, dash="dot"),
-                            showlegend=False
-                        ),
-                        row=1, col=1
-                    )
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_all["date"], y=bb_lower,
-                            name=f"{meta['short']} Lower BB",
-                            line=dict(color=meta["color"], width=0.8, dash="dot"),
-                            fill="tonexty",
-                            fillcolor="rgba(255,255,255,0.03)",
-                            showlegend=False
-                        ),
-                        row=1, col=1
-                    )
+            # RSI Subplot
+            if enable_rsi:
+                delta = y_full.diff()
+                gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+                rs = gain / loss
+                rsi = 100 - (100 / (1 + rs))
 
-                # RSI Subplot
-                if enable_rsi and ptype == "Mais Frequente (Freq)":
-                    delta = y_full.diff()
-                    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-                    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-                    rs = gain / loss
-                    rsi = 100 - (100 / (1 + rs))
-
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_all["date"], y=rsi,
-                            name=f"{meta['short']} RSI",
-                            line=dict(color=meta["color"], width=1.5)
-                        ),
-                        row=2, col=1
-                    )
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_all["date"], y=rsi,
+                        name=f"{meta['short']} RSI",
+                        line=dict(color=meta["color"], width=1.5)
+                    ),
+                    row=2, col=1
+                )
 
     if enable_rsi:
         fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.5)", row=2, col=1)
         fig.add_hline(y=30, line_dash="dash", line_color="rgba(34, 197, 94, 0.5)", row=2, col=1)
         fig.update_yaxes(range=[0, 100], row=2, col=1, title="RSI", gridcolor="#2C251C")
 
-    # Timeframe Selector Buttons
+    # Timeframe Preset Selector Buttons
     rangeselector_config = dict(
         buttons=list([
             dict(count=1, label="1m", step="month", stepmode="backward"),
@@ -661,23 +611,17 @@ def build_chart(categories_to_plot):
         spikethickness=1, spikedash="dot", spikecolor="#A69D8A"
     )
 
+    # Automatic Y-Axis scaling on time range switch
     yaxis_config = dict(
         type="log" if is_log_scale else "linear",
+        autorange=True,
+        fixedrange=False,
         title=f"Price ({unit_label})",
         gridcolor="#2C251C",
         linecolor="#2C251C",
         showspikes=True, spikemode="across", spikesnap="cursor",
         spikethickness=1, spikedash="dot", spikecolor="#A69D8A"
     )
-
-    # Dynamic Y-Axis Bounds Calculation
-    if all_visible_y and not is_log_scale:
-        y_min = min(all_visible_y)
-        y_max = max(all_visible_y)
-        y_span = y_max - y_min
-        padding = y_span * 0.08 if y_span > 0 else (y_max * 0.05 if y_max > 0 else 0.5)
-        yaxis_config["range"] = [max(0, y_min - padding), y_max + padding]
-        yaxis_config["autorange"] = False
 
     if use_zoom:
         xaxis_config["range"] = [zoom_start, zoom_end]
