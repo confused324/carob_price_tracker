@@ -113,25 +113,18 @@ html, body, [class*="css"] {
     font-size: 1.1rem; 
     font-weight: 600;
     color: var(--text); 
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.card-row {
-    display: flex; 
-    justify-content: space-between; 
-    align-items: baseline;
-    font-size: 0.88rem; 
-    color: var(--text-dim); 
-    padding: 3px 0;
-}
-
-.card-val { 
-    font-variant-numeric: tabular-nums; 
-    font-weight: 600; 
-    color: var(--text); 
+.card-main-val {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    margin-top: 4px;
 }
 
 .delta-badge {
@@ -163,7 +156,7 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. CONSTANTS
+# 3. CONSTANTS & HELPERS
 # ==========================================
 MASTER_FILE = "sima_master.csv"
 GET_COTACOES_URL = "https://regsima.gpp.pt/regsima/consulta/get_cotacoes"
@@ -179,6 +172,11 @@ PRICE_TYPE_META = {
     "Mínimo (Min)": {"field": "min", "dash": "dash"},
     "Máximo (Max)": {"field": "max", "dash": "dot"},
 }
+
+def hex_to_rgba(hex_str, opacity=0.15):
+    hex_str = hex_str.lstrip('#')
+    r, g, b = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {opacity})"
 
 # ==========================================
 # 4. DATA FETCHING (Cached)
@@ -316,7 +314,7 @@ def resolve_period_start(period_label, latest_date, earliest_date):
 def fmt_price(val, multiplier, unit_label):
     return f"{val * multiplier:.2f} {unit_label}" if pd.notna(val) else "N/A"
 
-def render_card(category_label, freq, min_v, max_v, multiplier, unit_label, delta_pct=None):
+def render_card(category_label, freq, multiplier, unit_label, delta_pct=None):
     meta = CATEGORY_META[category_label]
     delta_html = ""
     if delta_pct is not None:
@@ -331,9 +329,7 @@ def render_card(category_label, freq, min_v, max_v, multiplier, unit_label, delt
             <span>{category_label}</span>
             {delta_html}
         </div>
-        <div class="card-row"><span>Freq</span><span class="card-val">{fmt_price(freq, multiplier, unit_label)}</span></div>
-        <div class="card-row"><span>Min</span><span class="card-val">{fmt_price(min_v, multiplier, unit_label)}</span></div>
-        <div class="card-row"><span>Max</span><span class="card-val">{fmt_price(max_v, multiplier, unit_label)}</span></div>
+        <div class="card-main-val">{fmt_price(freq, multiplier, unit_label)}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -365,13 +361,14 @@ multiplier = 15.0 if "arroba" in unit_mode else 1.0
 unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
 selected_price_types = st.sidebar.multiselect(
-    "Price Types", list(PRICE_TYPE_META.keys()), default=["Mais Frequente (Freq)"]
+    "Price Types to Plot", list(PRICE_TYPE_META.keys()), default=["Mais Frequente (Freq)"]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📈 TradingView Tools")
+st.sidebar.subheader("📈 TradingView & Chart Tools")
 
-# Technical Overlays Controls
+# HLC Range & Technical Overlays Controls
+enable_hlc_range = st.sidebar.checkbox("Overlay High-Low (Min-Max) Band", value=True)
 enable_sma = st.sidebar.checkbox("Overlay SMA (Moving Avg)", value=False)
 sma_window = st.sidebar.number_input("SMA Window (weeks)", min_value=2, max_value=52, value=4) if enable_sma else 4
 
@@ -403,8 +400,6 @@ for col, cat_label in zip(cols, CATEGORY_META.keys()):
         render_card(
             cat_label,
             latest.get(f"{key}_freq"),
-            latest.get(f"{key}_min"),
-            latest.get(f"{key}_max"),
             multiplier,
             unit_label
         )
@@ -463,8 +458,6 @@ for col, cat_label in zip(comp_cols, CATEGORY_META.keys()):
         render_card(
             cat_label,
             latest_freq,
-            latest.get(f"{key}_min"),
-            latest.get(f"{key}_max"),
             multiplier,
             unit_label,
             delta_pct=delta_pct
@@ -505,7 +498,7 @@ def build_chart(categories_to_plot):
     else:
         fig = make_subplots(rows=1, cols=1)
 
-    # Calculate active dynamic window for auto-scale logic
+    # Active dynamic window for auto-scale calculations
     active_start = zoom_start if use_zoom else earliest_date
     active_end = zoom_end if use_zoom else latest_date
 
@@ -518,6 +511,38 @@ def build_chart(categories_to_plot):
         meta = CATEGORY_META[cat]
         key = meta["key"]
 
+        # 1. High-Low (Min-Max) HLC Range Shading
+        if enable_hlc_range:
+            col_min = f"{key}_min"
+            col_max = f"{key}_max"
+            if col_min in df_all.columns and col_max in df_all.columns:
+                y_min = df_all[col_min] * multiplier
+                y_max = df_all[col_max] * multiplier
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_all["date"], y=y_max,
+                        name=f"{meta['short']} Max Range",
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo="skip"
+                    ),
+                    row=1, col=1
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_all["date"], y=y_min,
+                        name=f"{meta['short']} Min-Max Band",
+                        line=dict(width=0),
+                        fill="tonexty",
+                        fillcolor=hex_to_rgba(meta["color"], opacity=0.12),
+                        showlegend=False,
+                        hoverinfo="skip"
+                    ),
+                    row=1, col=1
+                )
+
+        # 2. Main Price Lines & Overlays
         for ptype in selected_price_types:
             pmeta = PRICE_TYPE_META[ptype]
             col_name = f"{key}_{pmeta['field']}"
@@ -525,7 +550,7 @@ def build_chart(categories_to_plot):
             if col_name in df_all.columns:
                 y_full = df_all[col_name] * multiplier
                 
-                # Visible slice data points for dynamic Y-range
+                # Dynamic range tracking
                 y_slice = df_slice[col_name].dropna() * multiplier
                 if not y_slice.empty:
                     all_visible_y.extend(y_slice.tolist())
@@ -608,7 +633,7 @@ def build_chart(categories_to_plot):
         fig.add_hline(y=30, line_dash="dash", line_color="rgba(34, 197, 94, 0.5)", row=2, col=1)
         fig.update_yaxes(range=[0, 100], row=2, col=1, title="RSI", gridcolor="#2C251C")
 
-    # Timeframe Preset Selector Buttons
+    # Timeframe Selector Buttons
     rangeselector_config = dict(
         buttons=list([
             dict(count=1, label="1m", step="month", stepmode="backward"),
