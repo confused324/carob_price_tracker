@@ -63,7 +63,7 @@ html, body, [class*="css"] {
     font-weight: 600; 
     font-size: 1.3rem;
     color: var(--text); 
-    margin: 0 0 0.8rem 0;
+    margin: 0 0 0.5rem 0;
 }
 
 .card {
@@ -271,7 +271,7 @@ def process_data(df_raw):
 # 6. SHARED HELPERS
 # ==========================================
 def resolve_period_start(period_label, latest_date, earliest_date):
-    if period_label in ("All Time", "Max (All Time)"):
+    if period_label in ("All Time", "Max (All Time)", "MAX"):
         return earliest_date
     if period_label == "Year-to-Date (YTD)":
         return pd.Timestamp(year=latest_date.year, month=1, day=1)
@@ -279,10 +279,15 @@ def resolve_period_start(period_label, latest_date, earliest_date):
     offsets = {
         "1 Week": {"weeks": 1},
         "1 Month": {"months": 1},
+        "1M": {"months": 1},
         "3 Months": {"months": 3},
+        "3M": {"months": 3},
         "6 Months": {"months": 6},
+        "6M": {"months": 6},
         "1 Year": {"years": 1},
+        "1Y": {"years": 1},
         "5 Years": {"years": 5},
+        "5Y": {"years": 5},
     }
     kwargs = offsets.get(period_label)
     return latest_date - pd.DateOffset(**kwargs) if kwargs else earliest_date
@@ -337,7 +342,7 @@ multiplier = 15.0 if "arroba" in unit_mode else 1.0
 unit_label = "€/@" if "arroba" in unit_mode else "€/kg"
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📈 TradingView & Chart Tools")
+st.sidebar.subheader("📈 Technical Overlays")
 
 enable_hlc_range = st.sidebar.checkbox("Overlay High-Low (Min-Max) Band", value=True)
 enable_sma = st.sidebar.checkbox("Overlay SMA (Moving Avg)", value=False)
@@ -443,20 +448,36 @@ selected_cats_for_chart = list(CATEGORY_META.keys())
 
 st.markdown('<div class="chart-heading">Price History & Analytics</div>', unsafe_allow_html=True)
 
-# Custom Date Filter integrated inline next to time ranges
-c_zoom1, c_zoom2, c_zoom3 = st.columns([1, 1, 1.2])
-with c_zoom1:
-    zoom_start = pd.Timestamp(st.date_input("From Date", value=earliest_date.date(), min_value=earliest_date.date(), max_value=latest_date.date(), key="z_start"))
-with c_zoom2:
-    zoom_end = pd.Timestamp(st.date_input("To Date", value=latest_date.date(), min_value=earliest_date.date(), max_value=latest_date.date(), key="z_end"))
-with c_zoom3:
-    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-    use_zoom = st.checkbox("Apply Custom Time Range", value=False)
+# --- UNIFIED INLINE TIME RANGE BAR ---
+t_col1, t_col2, t_col3 = st.columns([3.2, 1, 1], vertical_alignment="bottom")
 
-if zoom_start > zoom_end:
-    zoom_start, zoom_end = zoom_end, zoom_start
+with t_col1:
+    selected_range_preset = st.radio(
+        "Chart Horizon",
+        ["1M", "3M", "6M", "YTD", "1Y", "5Y", "MAX", "Custom"],
+        index=6,
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+if selected_range_preset == "Custom":
+    with t_col2:
+        custom_from = pd.Timestamp(st.date_input("From", value=(latest_date - pd.DateOffset(months=6)).date(), min_value=earliest_date.date(), max_value=latest_date.date()))
+    with t_col3:
+        custom_to = pd.Timestamp(st.date_input("To", value=latest_date.date(), min_value=earliest_date.date(), max_value=latest_date.date()))
+    
+    if custom_from > custom_to:
+        custom_from, custom_to = custom_to, custom_from
+    
+    range_start_date, range_end_date = custom_from, custom_to
+else:
+    range_end_date = latest_date
+    range_start_date = resolve_period_start(selected_range_preset, latest_date, earliest_date)
 
 def build_chart(categories_to_plot):
+    # Slice dataframe dynamically so plot scale adjusts automatically
+    df_slice = df_all[(df_all["date"] >= range_start_date) & (df_all["date"] <= range_end_date)].copy()
+
     if enable_rsi:
         fig = make_subplots(
             rows=2, cols=1,
@@ -472,17 +493,17 @@ def build_chart(categories_to_plot):
         meta = CATEGORY_META[cat]
         key = meta["key"]
 
-        # 1. High-Low (Min-Max) Range Band
+        # 1. High-Low (Min-Max) Band
         if enable_hlc_range:
             col_min = f"{key}_min"
             col_max = f"{key}_max"
-            if col_min in df_all.columns and col_max in df_all.columns:
-                y_min = df_all[col_min] * multiplier
-                y_max = df_all[col_max] * multiplier
+            if col_min in df_slice.columns and col_max in df_slice.columns:
+                y_min = df_slice[col_min] * multiplier
+                y_max = df_slice[col_max] * multiplier
 
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"], y=y_max,
+                        x=df_slice["date"], y=y_max,
                         name=f"{meta['short']} Max Range",
                         line=dict(width=0),
                         showlegend=False,
@@ -492,7 +513,7 @@ def build_chart(categories_to_plot):
                 )
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"], y=y_min,
+                        x=df_slice["date"], y=y_min,
                         name=f"{meta['short']} Min-Max Band",
                         line=dict(width=0),
                         fill="tonexty",
@@ -505,12 +526,12 @@ def build_chart(categories_to_plot):
 
         # 2. Main Price Line (Mais Frequente)
         col_freq = f"{key}_freq"
-        if col_freq in df_all.columns:
-            y_full = df_all[col_freq] * multiplier
+        if col_freq in df_slice.columns:
+            y_full = df_slice[col_freq] * multiplier
 
             fig.add_trace(
                 go.Scatter(
-                    x=df_all["date"],
+                    x=df_slice["date"],
                     y=y_full,
                     name=meta['short'],
                     line=dict(color=meta["color"], width=2.2),
@@ -524,7 +545,7 @@ def build_chart(categories_to_plot):
                 sma_series = y_full.rolling(window=sma_window).mean()
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"],
+                        x=df_slice["date"],
                         y=sma_series,
                         name=f"{meta['short']} SMA ({sma_window}w)",
                         line=dict(color=meta["color"], width=1.2, dash="dashdot"),
@@ -542,7 +563,7 @@ def build_chart(categories_to_plot):
 
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"], y=bb_upper,
+                        x=df_slice["date"], y=bb_upper,
                         name=f"{meta['short']} Upper BB",
                         line=dict(color=meta["color"], width=0.8, dash="dot"),
                         showlegend=False
@@ -551,7 +572,7 @@ def build_chart(categories_to_plot):
                 )
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"], y=bb_lower,
+                        x=df_slice["date"], y=bb_lower,
                         name=f"{meta['short']} Lower BB",
                         line=dict(color=meta["color"], width=0.8, dash="dot"),
                         fill="tonexty",
@@ -571,7 +592,7 @@ def build_chart(categories_to_plot):
 
                 fig.add_trace(
                     go.Scatter(
-                        x=df_all["date"], y=rsi,
+                        x=df_slice["date"], y=rsi,
                         name=f"{meta['short']} RSI",
                         line=dict(color=meta["color"], width=1.5)
                     ),
@@ -583,48 +604,25 @@ def build_chart(categories_to_plot):
         fig.add_hline(y=30, line_dash="dash", line_color="rgba(34, 197, 94, 0.5)", row=2, col=1)
         fig.update_yaxes(range=[0, 100], row=2, col=1, title="RSI", gridcolor="#2C251C")
 
-    # Timeframe Preset Selector Buttons
-    rangeselector_config = dict(
-        buttons=list([
-            dict(count=1, label="1m", step="month", stepmode="backward"),
-            dict(count=3, label="3m", step="month", stepmode="backward"),
-            dict(count=6, label="6m", step="month", stepmode="backward"),
-            dict(count=1, label="YTD", step="year", stepmode="todate"),
-            dict(count=1, label="1y", step="year", stepmode="backward"),
-            dict(count=5, label="5y", step="year", stepmode="backward"),
-            dict(step="all", label="MAX")
-        ]),
-        bgcolor="#241E17",
-        activecolor="#3D5A5B",
-        font=dict(color="#E8DFC8", size=10),
-        x=0.0, y=1.08,
-        xanchor="left", yanchor="top"
-    )
-
     xaxis_config = dict(
         type="date",
         gridcolor="#2C251C",
         linecolor="#2C251C",
-        rangeselector=rangeselector_config,
         rangeslider=dict(visible=show_rangeslider, bgcolor="#241E17"),
         showspikes=True, spikemode="across", spikesnap="cursor",
         spikethickness=1, spikedash="dot", spikecolor="#A69D8A"
     )
 
-    # Automatic Y-Axis scaling on time range switch
+    # Autorange automatically fits vertical scale to sliced visible range
     yaxis_config = dict(
         type="log" if is_log_scale else "linear",
         autorange=True,
-        fixedrange=False,
         title=f"Price ({unit_label})",
         gridcolor="#2C251C",
         linecolor="#2C251C",
         showspikes=True, spikemode="across", spikesnap="cursor",
         spikethickness=1, spikedash="dot", spikecolor="#A69D8A"
     )
-
-    if use_zoom:
-        xaxis_config["range"] = [zoom_start, zoom_end]
 
     if show_highlight and comp_period != "Max (All Time)":
         fig.add_vrect(
@@ -647,7 +645,7 @@ def build_chart(categories_to_plot):
         yaxis=yaxis_config,
         hovermode="x unified",
         height=620 if enable_rsi else 500,
-        margin=dict(t=50, b=50 if not show_rangeslider else 90, l=50, r=10),
+        margin=dict(t=20, b=50 if not show_rangeslider else 90, l=50, r=10),
     )
 
     return fig
